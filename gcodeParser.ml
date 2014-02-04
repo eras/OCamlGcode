@@ -4,7 +4,7 @@ module Lnoexn = BatList.Exceptionless
 
 let ( **> ) a b = a b
 
-type goto =
+type position =
     { x : float option;
       y : float option;
       z : float option;
@@ -13,12 +13,15 @@ type goto =
 
 type rest = string
 
+type move = 
+  | G0
+  | G1
+
 type input = 
-  | G0 of goto			     (* go to point *)
-  | G1 of goto			     (* go to point *)
+  | Move of (move * position)	     (* go to point *)
   | G90abs of rest		     (* switch to absolute movement *)
   | G91rel of rest		     (* switch to relative movement *)
-  | G92 of goto			     (* set values *)
+  | G92 of position		     (* set values *)
   | Other of string
 
 let string_of_gfloat f =
@@ -115,11 +118,11 @@ let parse_gcode () =
 	| _ when g0 ->
 	    let (x, y, z, e) = new_at in
 	      update_positions ();
-	      (G0 { x; y; z; e; rest = Lazy.force rest })
+	      (Move (G0, { x; y; z; e; rest = Lazy.force rest }))
 	| _ when g1 ->
 	    let (x, y, z, e) = new_at in
 	      update_positions ();
-	      (G1 { x; y; z; e; rest = Lazy.force rest })
+	      (Move (G1, { x; y; z; e; rest = Lazy.force rest }))
 	| _ when g92 ->
 	    let (x, y, z, e) = new_at in
 	      update_positions ();
@@ -152,7 +155,7 @@ let parse_gcode () =
 let string_of_input ?(mode=`Absolute) ?(previous) = 
   let (x', y', z', e') = 
     match mode, previous with
-      | `Absolute, Some (G0 { x; y; z; e; rest } | G1 { x; y; z; e; rest }) -> (x, y, z, e)
+      | `Absolute, Some (Move ((G0 | G1), { x; y; z; e; rest })) -> (x, y, z, e)
       | `Absolute, Some (G92 { x; y; z; e; rest }) -> (x, y, z, e)
       | (`Absolute | `Relative), Some (G90abs _ | G91rel _ | Other _) 
       | (`Absolute | `Relative), None
@@ -174,8 +177,8 @@ let string_of_input ?(mode=`Absolute) ?(previous) =
       label ^ f "X" x x' ^ f "Y" y y' ^ f "Z" z z' ^ f "E" e e' ^ " " ^ rest
   in
   function
-  | G0 { x; y; z; e; rest } -> coord_cmd "G0" x y z e rest
-  | G1 { x; y; z; e; rest } -> coord_cmd "G1" x y z e rest
+  | Move (G0, { x; y; z; e; rest }) -> coord_cmd "G0" x y z e rest
+  | Move (G1, { x; y; z; e; rest }) -> coord_cmd "G1" x y z e rest
   | G92 { x; y; z; e; rest } -> coord_cmd "G92" x y z e rest
   | G90abs rest -> "G90 " ^ rest
   | G91rel rest -> "G91 " ^ rest
