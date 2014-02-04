@@ -1,0 +1,6 @@
+requires = "batteries pcre"
+version = "0.0.1"
+description = "Gcode parsing and generation libary"
+archive(byte) = "gcode.cma"
+archive(native) = "smtp.cmxa"
+archive(native,gprof) = "smtp.p.cmxa"
