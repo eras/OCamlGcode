@@ -19,7 +19,7 @@ type input =
 
 val string_of_gfloat : float -> string
 
-val string_of_token : GcodeLexer.token -> string
+val string_of_token : Lexer.token -> string
 
 val parse_gcode : Lexing.lexbuf -> input BatEnum.t
 

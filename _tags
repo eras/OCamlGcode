@@ -1,1 +1,1 @@
-<*>: package(batteries), package(pcre)
+<*.ml> or <*.mli> or <*.mll>: package(batteries), package(pcre), for-pack(Gcode)

@@ -43,11 +43,11 @@ let string_of_gfloat f =
   )
 
 let string_of_token = function
-  | GcodeLexer.Eof -> ""
-  | GcodeLexer.Entry (register, GcodeLexer.Int value) -> Printf.sprintf "%c%d" register value
-  | GcodeLexer.Entry (register, GcodeLexer.Float value) -> Printf.sprintf "%c%s" register (string_of_gfloat value)
-  | GcodeLexer.Comment str -> str
-  | GcodeLexer.Eol -> "\n"
+  | Lexer.Eof -> ""
+  | Lexer.Entry (register, Lexer.Int value) -> Printf.sprintf "%c%d" register value
+  | Lexer.Entry (register, Lexer.Float value) -> Printf.sprintf "%c%s" register (string_of_gfloat value)
+  | Lexer.Comment str -> str
+  | Lexer.Eol -> "\n"
 
 let coalesce2 a b =
   match a with
@@ -70,21 +70,21 @@ let parse_gcode lex_input =
   let prev_at = (ref None, ref None, ref None, ref None) in
   let process accu =
     let get_float x = 
-      match Lnoexn.find (function GcodeLexer.Entry (reg, _) when reg = x -> true | _ -> false) accu with
+      match Lnoexn.find (function Lexer.Entry (reg, _) when reg = x -> true | _ -> false) accu with
 	| None -> None
-	| Some (GcodeLexer.Entry (_, GcodeLexer.Float value)) -> Some value
-	| Some (GcodeLexer.Entry (_, GcodeLexer.Int value)) -> Some (float_of_int value)
+	| Some (Lexer.Entry (_, Lexer.Float value)) -> Some value
+	| Some (Lexer.Entry (_, Lexer.Int value)) -> Some (float_of_int value)
 	| Some _ -> assert false
     in
-    let g0 = List.mem (GcodeLexer.Entry ('G', GcodeLexer.Int 0)) accu in
-    let g1 = List.mem (GcodeLexer.Entry ('G', GcodeLexer.Int 1)) accu in
-    let g90 = List.mem (GcodeLexer.Entry ('G', GcodeLexer.Int 90)) accu in
-    let g91 = List.mem (GcodeLexer.Entry ('G', GcodeLexer.Int 91)) accu in
-    let g92 = List.mem (GcodeLexer.Entry ('G', GcodeLexer.Int 92)) accu in
+    let g0 = List.mem (Lexer.Entry ('G', Lexer.Int 0)) accu in
+    let g1 = List.mem (Lexer.Entry ('G', Lexer.Int 1)) accu in
+    let g90 = List.mem (Lexer.Entry ('G', Lexer.Int 90)) accu in
+    let g91 = List.mem (Lexer.Entry ('G', Lexer.Int 91)) accu in
+    let g92 = List.mem (Lexer.Entry ('G', Lexer.Int 92)) accu in
     let (x, y, z, e) = app4 get_float ('X', 'Y', 'Z', 'E') in
     let rest = 
       lazy (
-	let r = List.filter (function GcodeLexer.Entry (reg, _) when List.mem reg ['X'; 'Y'; 'Z'; 'G'; 'E'; 'M'] -> false | _ -> true) accu in
+	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg ['X'; 'Y'; 'Z'; 'G'; 'E'; 'M'] -> false | _ -> true) accu in
 	  String.concat "" **> List.rev_map string_of_token r
       ) in
     let default_zero at = app4 (BatOption.default 0.0) at in
@@ -137,17 +137,17 @@ let parse_gcode lex_input =
 	  next := None;
 	  fn ()
       | None ->
-	  match GcodeLexer.token lex_input with
-	    | GcodeLexer.Eof -> 
+	  match Lexer.token lex_input with
+	    | Lexer.Eof -> 
 		next := Some eof;
 		process accu
-	    | GcodeLexer.Entry _ as entry ->
+	    | Lexer.Entry _ as entry ->
 		loop (entry::accu)
-	    | GcodeLexer.Comment _ as token ->
+	    | Lexer.Comment _ as token ->
 		next := Some (fun () -> Other (string_of_token token));
 		process accu
-	    | GcodeLexer.Eol ->
-		process (GcodeLexer.Eol::accu)
+	    | Lexer.Eol ->
+		process (Lexer.Eol::accu)
   in
     BatEnum.from (fun () -> loop [])
 
