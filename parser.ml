@@ -8,8 +8,7 @@ type position =
     { x : float option;
       y : float option;
       z : float option;
-      e : float option;
-      rest : string; }
+      e : float option; }
 
 type rest = string
 
@@ -17,12 +16,12 @@ type move =
   | G0
   | G1
 
-type input = 
-  | Move of (move * position)	     (* go to point *)
-  | G90abs of rest		     (* switch to absolute movement *)
-  | G91rel of rest		     (* switch to relative movement *)
-  | G92 of position		     (* set values *)
-  | Other of string
+type word = 
+| Move of (move * position * rest) (* go to point *)
+| G90abs of rest		   (* switch to absolute movement *)
+| G91rel of rest		   (* switch to relative movement *)
+| G92 of (position * rest)	   (* set values *)
+| Other of string
 
 let string_of_gfloat f =
   let str = Printf.sprintf "%.5f" f in
@@ -117,15 +116,15 @@ let parse_gcode lex_input =
 	| _ when g0 ->
 	    let (x, y, z, e) = new_at in
 	      update_positions ();
-	      (Move (G0, { x; y; z; e; rest = Lazy.force rest }))
+	      (Move (G0, { x; y; z; e; }, Lazy.force rest))
 	| _ when g1 ->
 	    let (x, y, z, e) = new_at in
 	      update_positions ();
-	      (Move (G1, { x; y; z; e; rest = Lazy.force rest }))
+	      (Move (G1, { x; y; z; e; }, Lazy.force rest))
 	| _ when g92 ->
 	    let (x, y, z, e) = new_at in
 	      update_positions ();
-	      G92 { x; y; z; e; rest = Lazy.force rest }
+	      G92 ({ x; y; z; e; }, Lazy.force rest)
 	| _ -> 
 	    Other (String.concat " " (List.rev_map string_of_token accu))
     in
@@ -154,8 +153,8 @@ let parse_gcode lex_input =
 let string_of_input ?(mode=`Absolute) ?(previous) = 
   let (x', y', z', e') = 
     match mode, previous with
-      | `Absolute, Some (Move ((G0 | G1), { x; y; z; e; rest })) -> (x, y, z, e)
-      | `Absolute, Some (G92 { x; y; z; e; rest }) -> (x, y, z, e)
+      | `Absolute, Some (Move ((G0 | G1), { x; y; z; e; }, rest )) -> (x, y, z, e)
+      | `Absolute, Some (G92 ({ x; y; z; e; }, rest )) -> (x, y, z, e)
       | (`Absolute | `Relative), Some (G90abs _ | G91rel _ | Other _) 
       | (`Absolute | `Relative), None
       | `Relative, _ -> (None, None, None, None)
@@ -176,9 +175,9 @@ let string_of_input ?(mode=`Absolute) ?(previous) =
       label ^ f "X" x x' ^ f "Y" y y' ^ f "Z" z z' ^ f "E" e e' ^ " " ^ rest
   in
   function
-  | Move (G0, { x; y; z; e; rest }) -> coord_cmd "G0" x y z e rest
-  | Move (G1, { x; y; z; e; rest }) -> coord_cmd "G1" x y z e rest
-  | G92 { x; y; z; e; rest } -> coord_cmd "G92" x y z e rest
+  | Move (G0, { x; y; z; e; }, rest) -> coord_cmd "G0" x y z e rest
+  | Move (G1, { x; y; z; e; }, rest) -> coord_cmd "G1" x y z e rest
+  | G92 ({ x; y; z; e; }, rest) -> coord_cmd "G92" x y z e rest
   | G90abs rest -> "G90 " ^ rest
   | G91rel rest -> "G91 " ^ rest
   | Other str -> str
