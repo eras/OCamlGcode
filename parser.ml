@@ -1,27 +1,27 @@
-open BatPervasives
+open Batteries
 
 module Lnoexn = BatList.Exceptionless
 
 let ( **> ) a b = a b
 
-type position =
-    { x : float option;
-      y : float option;
-      z : float option;
-      e : float option; }
+type axis = [ `X | `Y | `Z | `E | `A | `B | `C ]
+
+module Axis = struct type t = axis let compare = compare end
+
+module AxisMap = Map.Make(struct type t = axis let compare = compare end)
+
+type position = float AxisMap.t
 
 type rest = string
 
-type move = 
-  | G0
-  | G1
+type move = G0 | G1
 
-type word = 
-| Move of (move * position * rest) (* go to point *)
-| G90abs of rest		   (* switch to absolute movement *)
-| G91rel of rest		   (* switch to relative movement *)
-| G92 of (position * rest)	   (* set values *)
-| Other of string
+type word =
+    Move of (move * position * rest)
+  | G90abs of rest
+  | G91rel of rest
+  | G92 of (position * rest)
+  | Other of string
 
 let string_of_gfloat f =
   let str = Printf.sprintf "%.5f" f in
@@ -59,6 +59,18 @@ let app4 f (x, y, z, e) = (f x, f y, f z, f e)
 
 let zip4 (a1, a2, a3, a4) (b1, b2, b3, b4) = ((a1, b1), (a2, b2), (a3, b3), (a4, b4))
 
+let axis_symbols = [(`X, 'X'); (`Y, 'Y'); (`Z, 'Z'); (`E, 'E'); (`A, 'A'); (`B, 'B'); (`C, 'C')]
+
+let axis, axis_chars = List.split axis_symbols
+
+let register_symbols = axis_symbols @ [(`G, 'G'); (`M, 'M'); (`T, 'T')]
+
+let registers, register_chars = List.split register_symbols
+
+let char_of_register register = List.assoc register register_symbols
+
+let char_of_axis axis = List.assoc axis axis_symbols
+
 let parse_gcode lex_input =
   let next = ref None in
   let rec eof () =
@@ -66,7 +78,7 @@ let parse_gcode lex_input =
     raise BatEnum.No_more_elements;
   in
   let mode = ref `Absolute in
-  let prev_at = (ref None, ref None, ref None, ref None) in
+  let prev_at = ref AxisMap.empty in
   let process accu =
     let get_float x = 
       match Lnoexn.find (function Lexer.Entry (reg, _) when reg = x -> true | _ -> false) accu with
@@ -80,53 +92,48 @@ let parse_gcode lex_input =
     let g90 = List.mem (Lexer.Entry ('G', Lexer.Int 90)) accu in
     let g91 = List.mem (Lexer.Entry ('G', Lexer.Int 91)) accu in
     let g92 = List.mem (Lexer.Entry ('G', Lexer.Int 92)) accu in
-    let (x, y, z, e) = app4 get_float ('X', 'Y', 'Z', 'E') in
+    let at = List.filter_map (
+      fun (symbol, char) ->
+	match get_float char with
+	| None -> None
+	| Some x -> Some (symbol, x)
+    ) axis_symbols in
     let rest = 
       lazy (
-	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg ['X'; 'Y'; 'Z'; 'G'; 'E'; 'M'] -> false | _ -> true) accu in
+	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg register_chars -> false | _ -> true) accu in
 	  String.concat "" **> List.rev_map string_of_token r
       ) in
-    let default_zero at = app4 (BatOption.default 0.0) at in
     let new_at = 
       match !mode with
-	| `Absolute -> app4 (uncurry coalesce2) (zip4 (x, y, z, e) (app4 (!) prev_at))
+	| `Absolute -> 
+	  List.fold_left (fun at (axis, value) -> AxisMap.add axis value at) !prev_at at
 	| `Relative -> 
-	    app4 
-	      (fun x -> Some x)
-	      (default_zero (x, y, z, e))
+	  List.fold_left (
+	    fun at (axis, value) -> 
+	      let old_value = AxisMap.find axis !prev_at in
+	      AxisMap.add axis (old_value +. value) at
+	  ) !prev_at at
     in
-    let update_positions () = 
-      ignore (app4 (uncurry (:=)) 
-		(zip4 prev_at
-		   (match !mode with
-		      | `Absolute ->  new_at
-		      | `Relative -> app4 (fun x -> Some x) (app4 (uncurry (+.)) (zip4 (default_zero new_at) (default_zero (app4 (!) prev_at))))
-		   )
-		)
-	     )
-    in
+    let update_positions () = prev_at := new_at in
     let value =
       match 0 with
-	| _ when g90 -> 
-	    mode := `Absolute;
-	    G90abs (Lazy.force rest)
-	| _ when g91 ->
-	    mode := `Relative;
-	    G91rel (Lazy.force rest)
-	| _ when g0 ->
-	    let (x, y, z, e) = new_at in
-	      update_positions ();
-	      (Move (G0, { x; y; z; e; }, Lazy.force rest))
-	| _ when g1 ->
-	    let (x, y, z, e) = new_at in
-	      update_positions ();
-	      (Move (G1, { x; y; z; e; }, Lazy.force rest))
-	| _ when g92 ->
-	    let (x, y, z, e) = new_at in
-	      update_positions ();
-	      G92 ({ x; y; z; e; }, Lazy.force rest)
-	| _ -> 
-	    Other (String.concat " " (List.rev_map string_of_token accu))
+      | _ when g90 -> 
+	mode := `Absolute;
+	G90abs (Lazy.force rest)
+      | _ when g91 ->
+	mode := `Relative;
+	G91rel (Lazy.force rest)
+      | _ when g0 ->
+	update_positions ();
+	(Move (G0, new_at, Lazy.force rest))
+      | _ when g1 ->
+	update_positions ();
+	(Move (G1, new_at, Lazy.force rest))
+      | _ when g92 ->
+	update_positions ();
+	G92 (new_at, Lazy.force rest)
+      | _ -> 
+	Other (String.concat " " (List.rev_map string_of_token accu))
     in
       value
   in
@@ -151,15 +158,15 @@ let parse_gcode lex_input =
     BatEnum.from (fun () -> loop [])
 
 let string_of_input ?(mode=`Absolute) ?(previous) = 
-  let (x', y', z', e') = 
-    match mode, previous with
-      | `Absolute, Some (Move ((G0 | G1), { x; y; z; e; }, rest )) -> (x, y, z, e)
-      | `Absolute, Some (G92 ({ x; y; z; e; }, rest )) -> (x, y, z, e)
-      | (`Absolute | `Relative), Some (G90abs _ | G91rel _ | Other _) 
-      | (`Absolute | `Relative), None
-      | `Relative, _ -> (None, None, None, None)
-  in
-  let coord_cmd label x y z e rest =
+  (* let at' =  *)
+  (*   match mode, previous with *)
+  (*     | `Absolute, Some (Move ((G0 | G1), at, rest )) -> at *)
+  (*     | `Absolute, Some (G92 (at, rest )) -> at *)
+  (*     | (`Absolute | `Relative), Some (G90abs _ | G91rel _ | Other _)  *)
+  (*     | (`Absolute | `Relative), None *)
+  (*     | `Relative, _ -> AxisMap.empty *)
+  (* in *)
+  let coord_cmd label at rest =
     let f label x x' = 
       match mode with
 	| `Absolute ->
@@ -172,12 +179,27 @@ let string_of_input ?(mode=`Absolute) ?(previous) =
 	      | Some x when string_of_gfloat x <> string_of_gfloat 0.0 -> Printf.sprintf " %s%s" label (string_of_gfloat x)
 	      | None | Some _ -> ""
     in
-      label ^ f "X" x x' ^ f "Y" y y' ^ f "Z" z z' ^ f "E" e e' ^ " " ^ rest
+    (* this logic doesn't work. TODO: working elimination of redundant information *)
+    (* label ^  *)
+    (*   List.map  *)
+    (*   (fun (axis, value) -> *)
+    (* 	if AxisMap.mem )  *)
+    (*   at *)
+    (*   label ^ f "X" x_opt x_opt' ^ f "Y" y_opt y_opt' ^ f "Z" z_opt z_opt' ^ f "E" e_opt e_opt' ^ " " ^ rest *)
+    label ^ 
+      String.concat "" (
+	AxisMap.fold
+	  (fun axis value regs ->
+	    f (String.make 1 (char_of_axis axis)) (Some value) None::regs
+	  )
+	  at
+	  []
+      )
   in
   function
-  | Move (G0, { x; y; z; e; }, rest) -> coord_cmd "G0" x y z e rest
-  | Move (G1, { x; y; z; e; }, rest) -> coord_cmd "G1" x y z e rest
-  | G92 ({ x; y; z; e; }, rest) -> coord_cmd "G92" x y z e rest
+  | Move (G0, at, rest) -> coord_cmd "G0" at rest
+  | Move (G1, at, rest) -> coord_cmd "G1" at rest
+  | G92 (at, rest) -> coord_cmd "G92" at rest
   | G90abs rest -> "G90 " ^ rest
   | G91rel rest -> "G91 " ^ rest
   | Other str -> str

@@ -1,13 +1,14 @@
-type position = {
-  x : float option;
-  y : float option;
-  z : float option;
-  e : float option;
-}
+type axis = [ `X | `Y | `Z | `E | `A | `B | `C ]
 
 type rest = string
 
 type move = G0 | G1
+
+module Axis : Map.OrderedType with type t = axis
+
+module AxisMap : Map.S with type key = axis
+
+type position = float AxisMap.t
 
 type word =
     Move of (move * position * rest)
