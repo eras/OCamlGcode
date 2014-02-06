@@ -10,6 +10,12 @@ module AxisMap : Map.S with type key = axis
 
 type position = float AxisMap.t
 
+type machine_state = {
+  ms_coord_mode : [`Absolute | `Relative]
+}
+
+val default_machine_state : machine_state
+
 type word =
     Move of (move * position * rest)
   | G90abs of rest
@@ -21,8 +27,6 @@ val string_of_gfloat : float -> string
 
 val string_of_token : Lexer.token -> string
 
-val parse_gcode : Lexing.lexbuf -> word BatEnum.t
+val parse_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> word BatEnum.t
 
-val string_of_input :
-  ?mode:[< `Absolute | `Relative > `Absolute ] ->
-  ?previous:word -> word -> string
+val string_of_input : ?machine_state : machine_state -> ?previous:word -> word -> string

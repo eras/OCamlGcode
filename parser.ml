@@ -16,6 +16,14 @@ type rest = string
 
 type move = G0 | G1
 
+type machine_state = {
+  ms_coord_mode : [`Absolute | `Relative]
+}
+
+let default_machine_state = {
+  ms_coord_mode = `Absolute
+}
+
 type word =
     Move of (move * position * rest)
   | G90abs of rest
@@ -71,7 +79,7 @@ let char_of_register register = List.assoc register register_symbols
 
 let char_of_axis axis = List.assoc axis axis_symbols
 
-let parse_gcode lex_input =
+let parse_gcode ?machine_state lex_input =
   let next = ref None in
   let rec eof () =
     next := Some eof;
@@ -157,7 +165,7 @@ let parse_gcode lex_input =
   in
     BatEnum.from (fun () -> loop [])
 
-let string_of_input ?(mode=`Absolute) ?(previous) = 
+let string_of_input ?(machine_state = default_machine_state) ?(previous) = 
   (* let at' =  *)
   (*   match mode, previous with *)
   (*     | `Absolute, Some (Move ((G0 | G1), at, rest )) -> at *)
@@ -168,7 +176,7 @@ let string_of_input ?(mode=`Absolute) ?(previous) =
   (* in *)
   let coord_cmd label at rest =
     let f label x x' = 
-      match mode with
+      match machine_state.ms_coord_mode with
 	| `Absolute ->
 	    ( match x', x with
 		| _, None -> ""
