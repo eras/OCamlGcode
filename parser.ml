@@ -16,6 +16,8 @@ type rest = string
 
 type move = G0 | G1
 
+type arc = G2 | G3
+
 type machine_state = {
   ms_coord_mode : [`Absolute | `Relative]
 }
@@ -24,12 +26,18 @@ let default_machine_state = {
   ms_coord_mode = `Absolute
 }
 
+type arc_offset = {
+  ao_i : float option;
+  ao_j : float option;
+}
+
 type word =
-    Move of (move * position * rest)
-  | G90abs of rest
-  | G91rel of rest
-  | G92 of (position * rest)
-  | Other of string
+| Move of (move * position * rest)
+| ArcCenter of (arc * position * arc_offset * rest)
+| G90abs of rest
+| G91rel of rest
+| G92 of (position * rest)
+| Other of string
 
 let string_of_gfloat f =
   let str = Printf.sprintf "%.5f" f in
@@ -71,7 +79,7 @@ let axis_symbols = [(`X, 'X'); (`Y, 'Y'); (`Z, 'Z'); (`E, 'E'); (`A, 'A'); (`B, 
 
 let axis, axis_chars = List.split axis_symbols
 
-let register_symbols = axis_symbols @ [(`G, 'G'); (`M, 'M'); (`T, 'T')]
+let register_symbols = axis_symbols @ [(`G, 'G'); (`M, 'M'); (`T, 'T'); (`I, 'I'); (`J, 'J')]
 
 let registers, register_chars = List.split register_symbols
 
@@ -95,17 +103,15 @@ let parse_gcode ?machine_state lex_input =
 	| Some (Lexer.Entry (_, Lexer.Int value)) -> Some (float_of_int value)
 	| Some _ -> assert false
     in
-    let g0 = List.mem (Lexer.Entry ('G', Lexer.Int 0)) accu in
-    let g1 = List.mem (Lexer.Entry ('G', Lexer.Int 1)) accu in
-    let g90 = List.mem (Lexer.Entry ('G', Lexer.Int 90)) accu in
-    let g91 = List.mem (Lexer.Entry ('G', Lexer.Int 91)) accu in
-    let g92 = List.mem (Lexer.Entry ('G', Lexer.Int 92)) accu in
+    let is_g n = List.mem (Lexer.Entry ('G', Lexer.Int n)) accu in
     let at = List.filter_map (
       fun (symbol, char) ->
 	match get_float char with
 	| None -> None
 	| Some x -> Some (symbol, x)
     ) axis_symbols in
+    let i = get_float 'I' in
+    let j = get_float 'J' in
     let rest = 
       lazy (
 	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg register_chars -> false | _ -> true) accu in
@@ -125,19 +131,25 @@ let parse_gcode ?machine_state lex_input =
     let update_positions () = prev_at := new_at in
     let value =
       match 0 with
-      | _ when g90 -> 
+      | _ when is_g 90 -> 
 	mode := `Absolute;
 	G90abs (Lazy.force rest)
-      | _ when g91 ->
+      | _ when is_g 91 ->
 	mode := `Relative;
 	G91rel (Lazy.force rest)
-      | _ when g0 ->
+      | _ when is_g 0 ->
 	update_positions ();
 	(Move (G0, new_at, Lazy.force rest))
-      | _ when g1 ->
+      | _ when is_g 1 ->
 	update_positions ();
 	(Move (G1, new_at, Lazy.force rest))
-      | _ when g92 ->
+      | _ when is_g 2 && (i <> None || j <> None) ->
+	update_positions ();
+	(ArcCenter (G2, new_at, { ao_i = i; ao_j = j; }, Lazy.force rest))
+      | _ when is_g 3 && (i <> None || j <> None) ->
+	update_positions ();
+	(ArcCenter (G3, new_at, { ao_i = i; ao_j = j; }, Lazy.force rest))
+      | _ when is_g 92 ->
 	update_positions ();
 	G92 (new_at, Lazy.force rest)
       | _ -> 
@@ -174,19 +186,29 @@ let string_of_input ?(machine_state = default_machine_state) word =
   (*     | (`Absolute | `Relative), None *)
   (*     | `Relative, _ -> AxisMap.empty *)
   (* in *)
-  let coord_cmd label at rest =
+  let string_of_coords at =
     let f label x x' = 
       match machine_state.ms_coord_mode with
-	| `Absolute ->
-	    ( match x', x with
-		| _, None -> ""
-		| Some x', Some x when string_of_gfloat x = string_of_gfloat x' -> ""
-		| _, Some x -> Printf.sprintf " %s%s" label (string_of_gfloat x) )
-	| `Relative ->
-	    match x with
-	      | Some x when string_of_gfloat x <> string_of_gfloat 0.0 -> Printf.sprintf " %s%s" label (string_of_gfloat x)
-	      | None | Some _ -> ""
+      | `Absolute ->
+	( match x', x with
+	| _, None -> ""
+	| Some x', Some x when string_of_gfloat x = string_of_gfloat x' -> ""
+	| _, Some x -> Printf.sprintf " %s%s" label (string_of_gfloat x) )
+      | `Relative ->
+	match x with
+	| Some x when string_of_gfloat x <> string_of_gfloat 0.0 -> Printf.sprintf " %s%s" label (string_of_gfloat x)
+	| None | Some _ -> ""
     in
+    String.concat "" (
+      AxisMap.fold
+	(fun axis value regs ->
+	  f (String.make 1 (char_of_axis axis)) (Some value) None::regs
+	)
+	at
+	[]
+    )
+  in
+  let coord_cmd label at rest =
     (* this logic doesn't work. TODO: working elimination of redundant information *)
     (* label ^  *)
     (*   List.map  *)
@@ -194,20 +216,26 @@ let string_of_input ?(machine_state = default_machine_state) word =
     (* 	if AxisMap.mem )  *)
     (*   at *)
     (*   label ^ f "X" x_opt x_opt' ^ f "Y" y_opt y_opt' ^ f "Z" z_opt z_opt' ^ f "E" e_opt e_opt' ^ " " ^ rest *)
-    label ^ 
-      String.concat "" (
-	AxisMap.fold
-	  (fun axis value regs ->
-	    f (String.make 1 (char_of_axis axis)) (Some value) None::regs
-	  )
-	  at
-	  []
-      )
+    label ^ string_of_coords at
+  in
+  let arc_cmd label at center rest =
+    let string_of_opt_float key value =
+      Option.default "" @@
+	flip Option.map value @@ fun v ->
+	  key ^ string_of_gfloat v
+    in	
+    label 
+    ^ string_of_coords at
+    ^ string_of_opt_float "I" center.ao_i 
+    ^ string_of_opt_float "I" center.ao_j
+    ^ " " ^ rest
   in
   let str =
     match word with
     | Move (G0, at, rest) -> coord_cmd "G0" at rest
     | Move (G1, at, rest) -> coord_cmd "G1" at rest
+    | ArcCenter (G2, at, center, rest) -> arc_cmd "G2" at center rest
+    | ArcCenter (G3, at, center, rest) -> arc_cmd "G3" at center rest
     | G92 (at, rest) -> coord_cmd "G92" at rest
     | G90abs rest -> "G90 " ^ rest
     | G91rel rest -> "G91 " ^ rest
