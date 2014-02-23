@@ -1,0 +1,301 @@
+open Types
+
+let group_of_gm : gm -> group = function
+|  `G4 | `G10 | `G28 | `G30 |   `G53 | `G92 | `G92_1 | `G92_2 | `G92_3 -> `NonModal
+|  `G0 |  `G1 |  `G2 |  `G3 | `G38_2 | `G80 |   `G81 |   `G82 | `G83 | `G84 | `G85 | `G86 | `G87 | `G88 | `G89 -> `Motion
+| `G17 | `G18 | `G19 -> `Plane
+| `G90 | `G91 -> `Distance
+| `G93 | `G94 -> `FeedRate
+| `G20 | `G21 -> `Units
+| `G40 | `G41 | `G42 -> `CutterRadiusCompensation
+| `G43 | `G49 -> `LengthOffset
+| `G98 | `G99 -> `ReturnMode
+| `G54 | `G55   | `G56 | `G57 | `G58 | `G59 | `G59_1 | `G59_2 | `G59_3 -> `CoordinateSystem
+| `G61 | `G61_1 | `G64 -> `PathControl
+|  `M0 |  `M1   | `M2 | `M30 | `M60 -> `Stopping
+|  `M6 -> `Tool
+|  `M3 |  `M4 | `M5 -> `Spindle
+|  `M7 |  `M8 | `M9 -> `Coolant
+| `M48 | `M49 -> `Override
+
+let command_of_g_value (reg, value) = 
+  match reg, truncate (value *. 1000.0 +. 0.5) with
+  | `G,  0000  -> `G0
+  | `G,  1000  -> `G1
+  | `G,  2000  -> `G2
+  | `G,  3000  -> `G3
+  | `G,  4000  -> `G4
+  | `G, 10000 -> `G10
+  | `G, 17000 -> `G17
+  | `G, 18000 -> `G18
+  | `G, 19000 -> `G19
+  | `G, 20000 -> `G20
+  | `G, 21000 -> `G21
+  | `G, 28000 -> `G28
+  | `G, 30000 -> `G30
+  | `G, 38200 -> `G38_2
+  | `G, 40000 -> `G40
+  | `G, 41000 -> `G41
+  | `G, 42000 -> `G42
+  | `G, 43000 -> `G43
+  | `G, 49000 -> `G49
+  | `G, 53000 -> `G53
+  | `G, 54000 -> `G54
+  | `G, 55000 -> `G55
+  | `G, 56000 -> `G56
+  | `G, 57000 -> `G57
+  | `G, 58000 -> `G58
+  | `G, 59000 -> `G59
+  | `G, 59100 -> `G59_1
+  | `G, 59200 -> `G59_2
+  | `G, 59300 -> `G59_3
+  | `G, 61000 -> `G61
+  | `G, 61100 -> `G61_1
+  | `G, 64000 -> `G64
+  | `G, 80000 -> `G80
+  | `G, 81000 -> `G81
+  | `G, 82000 -> `G82
+  | `G, 83000 -> `G83
+  | `G, 84000 -> `G84
+  | `G, 85000 -> `G85
+  | `G, 86000 -> `G86
+  | `G, 87000 -> `G87
+  | `G, 88000 -> `G88
+  | `G, 89000 -> `G89
+  | `G, 90000 -> `G90
+  | `G, 91000 -> `G91
+  | `G, 92000 -> `G92
+  | `G, 92100 -> `G92_1
+  | `G, 92200 -> `G92_2
+  | `G, 92300 -> `G92_3
+  | `G, 93000 -> `G93
+  | `G, 94000 -> `G94
+  | `G, 98000 -> `G98
+  | `G, 99000 -> `G99
+  | `M,  0000  -> `M0
+  | `M,  1000  -> `M1
+  | `M,  2000  -> `M2
+  | `M,  6000  -> `M6
+  | `M,  3000  -> `M3
+  | `M,  4000  -> `M4
+  | `M,  5000  -> `M5
+  | `M,  7000  -> `M7
+  | `M,  8000  -> `M8
+  | `M,  9000  -> `M9
+  | `M, 30000 -> `M30
+  | `M, 48000 -> `M48
+  | `M, 49000 -> `M49
+  | `M, 60000 -> `M60
+  | _ -> failwith ("unknwon command")
+
+let init_position =
+  List.fold_left
+    (fun axisMap axis -> AxisMap.add axis 0.0 axisMap)
+    AxisMap.empty
+    axis
+
+let init_regs =
+  List.fold_left
+    (fun regMap init -> RegMap.add init 0.0 regMap)
+    RegMap.empty
+    axis
+
+let init_entry_words = {
+  ew_g_nonmodal                   = None;
+
+  ew_g_motion                     = None;
+  ew_g_plane                      = None;
+  ew_g_distance                   = None;
+  ew_g_feed_rate                  = None;
+  ew_g_units                      = None;
+  ew_g_cutter_radius_compensation = None;
+  ew_g_length_offset              = None;
+  ew_g_return_mode                = None;
+  ew_g_coordinate_system          = None;
+  ew_g_path_control               = None;
+
+  ew_m_stopping                   = None;
+  ew_m_tool                       = None;
+  ew_m_spindle                    = None;
+  ew_m_coolant                    = None;
+  ew_m_override                   = None;
+
+  ew_regs                         = RegMap.empty;
+}
+
+let init = {
+  ms_position                     = init_position;
+  ms_regs                          = init_regs;
+  (* ms_feedrate                     = None; *)
+
+  ms_g_motion                     = `G0;
+  ms_g_plane                      = `G17;
+  ms_g_distance                   = `G90;
+  ms_g_feed_rate                  = `G94;
+  ms_g_units                      = `G21;
+  ms_g_cutter_radius_compensation = `G40;
+  ms_g_length_offset              = `G49;
+  ms_g_return_mode                = `G99;
+  ms_g_coordinate_system          = `G54;
+  ms_g_path_control               = `G61;
+  (* ms_m_stopping                   = m_stopping; *)
+  (* ms_m_tool                       = m_tool; *)
+  (* ms_m_spindle                    = m_spindle; *)
+  (* ms_m_coolant                    = m_coolant; *)
+  (* ms_m_override                   = m_override; *)
+}
+
+(* repeated entries within the group are forbidden, as in the G-code specs *)
+let entry_words_of_words (words : word list) =
+  let check x y =
+    match x with
+    | None -> y
+    | Some _ -> failwith "entry_words_of_words: duplicate command value within a group"
+  in
+  List.fold_left 
+    (fun ews ((reg, value) : word) ->
+      match reg with
+      | (`G | `M) as reg ->
+        ( match command_of_g_value (reg, value) with
+        | #g_nonmodal                   as cmd -> check ews.ew_g_nonmodal                   { ews with ew_g_nonmodal                   = Some cmd }
+        | #g_motion                     as cmd -> check ews.ew_g_motion                     { ews with ew_g_motion                     = Some cmd }
+        | #g_plane                      as cmd -> check ews.ew_g_plane                      { ews with ew_g_plane                      = Some cmd }
+        | #g_distance                   as cmd -> check ews.ew_g_distance                   { ews with ew_g_distance                   = Some cmd }
+        | #g_feed_rate                  as cmd -> check ews.ew_g_feed_rate                  { ews with ew_g_feed_rate                  = Some cmd }
+        | #g_units                      as cmd -> check ews.ew_g_units                      { ews with ew_g_units                      = Some cmd }
+        | #g_cutter_radius_compensation as cmd -> check ews.ew_g_cutter_radius_compensation { ews with ew_g_cutter_radius_compensation = Some cmd }
+        | #g_length_offset              as cmd -> check ews.ew_g_length_offset              { ews with ew_g_length_offset              = Some cmd }
+        | #g_return_mode                as cmd -> check ews.ew_g_return_mode                { ews with ew_g_return_mode                = Some cmd }
+        | #g_coordinate_system          as cmd -> check ews.ew_g_coordinate_system          { ews with ew_g_coordinate_system          = Some cmd }
+        | #g_path_control               as cmd -> check ews.ew_g_path_control               { ews with ew_g_path_control               = Some cmd }
+        | #m_stopping                   as cmd -> check ews.ew_m_stopping                   { ews with ew_m_stopping                   = Some cmd }
+        | #m_tool                       as cmd -> check ews.ew_m_tool                       { ews with ew_m_tool                       = Some cmd }
+        | #m_spindle                    as cmd -> check ews.ew_m_spindle                    { ews with ew_m_spindle                    = Some cmd }
+        | #m_coolant                    as cmd -> check ews.ew_m_coolant                    { ews with ew_m_coolant                    = Some cmd }
+        | #m_override                   as cmd -> check ews.ew_m_override                   { ews with ew_m_override                   = Some cmd }
+        )
+      | #reg as reg -> { ews with ew_regs = RegMap.add reg value ews.ew_regs }
+    )
+    init_entry_words
+    words
+
+module FilterMap (S : Map.S) (T : Map.S) = struct
+  let filter_map f m =
+    S.fold (
+      fun key value result ->
+        match f key value with
+        | None -> result
+        | Some (key, value) -> T.add key value result
+    ) m T.empty
+end
+
+let axis_of_regs regs =
+  let module M = FilterMap(RegMap)(AxisMap) in
+  M.filter_map (
+    fun key value ->
+      match key with
+      | #axis as axis -> Some (axis, value)
+      | #reg -> None
+  ) regs
+
+let replace_regs regs0 regs1 =
+  RegMap.fold
+    RegMap.add
+    regs1
+    regs0
+
+let add_axis_absolute axis0 axis1 =
+  AxisMap.fold
+    AxisMap.add
+    axis1
+    axis0
+
+let add_axis_relative axis0 axis1 =
+  AxisMap.fold
+    (fun axis value result ->
+      AxisMap.add axis (AxisMap.find axis result +. value) result
+    )
+    axis1
+    axis0
+
+let evaluate_step : machine_state -> word list -> step_result =
+  fun state words ->
+    let default = BatOption.default in
+    let ews = entry_words_of_words words in
+    let axis_word_using_nonmodal = 
+      match ews.ew_g_nonmodal with
+      | None -> None
+      | Some x when List.mem x axis_word_using_nonmodal -> Some x
+      | Some _ -> None
+    in
+    let axis = axis_of_regs ews.ew_regs in
+    let commands =
+      match axis_word_using_nonmodal,
+            ews.ew_g_motion, 
+            state.ms_g_motion with
+      | Some nonmodal, None, _ -> [(nonmodal :> command)]
+      | None, Some motion, _ when not (AxisMap.is_empty axis) -> [(motion :> command)]
+      | None, None, motion when not (AxisMap.is_empty axis) -> [(motion :> command)]
+      | None, None, _ -> []
+      | _ -> failwith "Colliding axis-using nonmodal and modal commands"
+    in
+    let position =
+      let movement =
+        match default state.ms_g_distance ews.ew_g_distance with
+        | `G90 -> add_axis_absolute
+        | `G91 -> add_axis_relative
+      in
+      movement state.ms_position axis
+    in
+    let state' = {
+      ms_position                     = position;
+      ms_regs                         = replace_regs state.ms_regs ews.ew_regs;
+
+      ms_g_motion                     = default state.ms_g_motion                     ews.ew_g_motion;
+      ms_g_plane                      = default state.ms_g_plane                      ews.ew_g_plane;
+      ms_g_distance                   = default state.ms_g_distance                   ews.ew_g_distance;
+      ms_g_feed_rate                  = default state.ms_g_feed_rate                  ews.ew_g_feed_rate;
+      ms_g_units                      = default state.ms_g_units                      ews.ew_g_units;
+      ms_g_cutter_radius_compensation = default state.ms_g_cutter_radius_compensation ews.ew_g_cutter_radius_compensation;
+      ms_g_length_offset              = default state.ms_g_length_offset              ews.ew_g_length_offset;
+      ms_g_return_mode                = default state.ms_g_return_mode                ews.ew_g_return_mode;
+      ms_g_coordinate_system          = default state.ms_g_coordinate_system          ews.ew_g_coordinate_system;
+      ms_g_path_control               = default state.ms_g_path_control               ews.ew_g_path_control;
+    } in
+    { sr_state0   = state;
+      sr_state1   = state';
+      sr_regs     = ews.ew_regs;
+      sr_commands = commands }
+
+let word_of_entry (char, value) =
+  (reg_cmd_of_char char,
+   match value with
+   | Lexer.Int x -> float_of_int x
+   | Lexer.Float x -> x)
+
+let evaluate_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> step_result BatEnum.t = 
+  fun ?(machine_state=init) lex_input->
+    let machine_state = ref machine_state in
+    let next = ref None in
+    let rec eof () =
+      next := Some eof;
+      raise BatEnum.No_more_elements;
+    in
+    let rec loop accu =
+      match !next with
+      | Some fn ->
+	next := None;
+	fn ()
+      | None ->
+	match Lexer.token lex_input with
+	| Lexer.Eof -> 
+	  next := Some eof;
+	  evaluate_step !machine_state (List.rev accu)
+	| Lexer.Entry entry ->
+	  loop (word_of_entry entry::accu)
+	| Lexer.Comment _ ->
+	  loop accu
+	| Lexer.Eol ->
+	  evaluate_step !machine_state (List.rev accu)
+    in
+    BatEnum.from (fun () -> loop [])
