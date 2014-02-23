@@ -165,7 +165,7 @@ let parse_gcode ?machine_state lex_input =
   in
     BatEnum.from (fun () -> loop [])
 
-let string_of_input ?(machine_state = default_machine_state) ?(previous) = 
+let string_of_input ?(machine_state = default_machine_state) word = 
   (* let at' =  *)
   (*   match mode, previous with *)
   (*     | `Absolute, Some (Move ((G0 | G1), at, rest )) -> at *)
@@ -204,10 +204,13 @@ let string_of_input ?(machine_state = default_machine_state) ?(previous) =
 	  []
       )
   in
-  function
-  | Move (G0, at, rest) -> coord_cmd "G0" at rest
-  | Move (G1, at, rest) -> coord_cmd "G1" at rest
-  | G92 (at, rest) -> coord_cmd "G92" at rest
-  | G90abs rest -> "G90 " ^ rest
-  | G91rel rest -> "G91 " ^ rest
-  | Other str -> str
+  let str =
+    match word with
+    | Move (G0, at, rest) -> coord_cmd "G0" at rest
+    | Move (G1, at, rest) -> coord_cmd "G1" at rest
+    | G92 (at, rest) -> coord_cmd "G92" at rest
+    | G90abs rest -> "G90 " ^ rest
+    | G91rel rest -> "G91 " ^ rest
+    | Other str -> str
+  in
+  (str, machine_state)

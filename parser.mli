@@ -29,4 +29,4 @@ val string_of_token : Lexer.token -> string
 
 val parse_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> word BatEnum.t
 
-val string_of_input : ?machine_state : machine_state -> ?previous:word -> word -> string
+val string_of_input : ?machine_state : machine_state -> word -> (string * machine_state)
