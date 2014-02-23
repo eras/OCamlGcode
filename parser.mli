@@ -15,6 +15,7 @@ type position = float AxisMap.t
 type machine_state = {
   ms_coord_mode : [`Absolute | `Relative];
   ms_position	: position;
+  ms_feedrate   : float option;
 }
 
 type arc_offset = {
@@ -23,16 +24,18 @@ type arc_offset = {
 }
 
 type move = {
-  move_reg  : move_reg;
-  move_pos  : position;
-  move_rest : rest;
+  move_reg	: move_reg;
+  move_pos	: position;
+  move_rest	: rest;
+  move_feedrate : float option;
 }
 
 type arc = {
-  arc_reg    : arc_reg;
-  arc_pos    : position;
-  arc_offset : arc_offset;
-  arc_rest   : rest;
+  arc_reg	: arc_reg;
+  arc_pos	: position;
+  arc_offset	: arc_offset;
+  arc_rest	: rest;
+  arc_feedrate	: float;
 }
 
 type word =

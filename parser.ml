@@ -21,11 +21,13 @@ type arc_reg = G2 | G3
 type machine_state = {
   ms_coord_mode : [`Absolute | `Relative];
   ms_position	: position;
+  ms_feedrate   : float option;
 }
 
 let default_machine_state = {
   ms_coord_mode = `Absolute;
   ms_position   = AxisMap.empty;
+  ms_feedrate   = None;
 }
 
 type arc_offset = {
@@ -34,16 +36,18 @@ type arc_offset = {
 }
 
 type move = {
-  move_reg  : move_reg;
-  move_pos  : position;
-  move_rest : rest;
+  move_reg	: move_reg;
+  move_pos	: position;
+  move_rest	: rest;
+  move_feedrate : float option;
 }
 
 type arc = {
-  arc_reg    : arc_reg;
-  arc_pos    : position;
-  arc_offset : arc_offset;
-  arc_rest   : rest;
+  arc_reg	: arc_reg;
+  arc_pos	: position;
+  arc_offset	: arc_offset;
+  arc_rest	: rest;
+  arc_feedrate	: float;
 }
 
 type word =
@@ -113,6 +117,7 @@ let parse_gcode ?machine_state lex_input =
   let mode = ref `Absolute in
   let prev_at = ref AxisMap.empty in
   let prev_move_g = ref None in
+  let feedrate = ref None in
   let process words =
     let get_float x = 
       match Lnoexn.find (function Lexer.Entry (reg, _) when reg = x -> true | _ -> false) words with
@@ -152,6 +157,7 @@ let parse_gcode ?machine_state lex_input =
     in
     let i = get_float 'I' in
     let j = get_float 'J' in
+    feedrate := coalesce2 (get_float 'F') !feedrate;
     let rest = 
       lazy (
 	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg register_chars -> false | _ -> true) words in
@@ -170,26 +176,26 @@ let parse_gcode ?machine_state lex_input =
     in
     let update_positions () = prev_at := new_pos in
     let value =
-      match cur_move_g with
-      | Some 90 ->
+      match cur_move_g, !feedrate with
+      | Some 90, _ ->
 	mode := `Absolute;
 	G90abs (Lazy.force rest)
-      | Some 91 ->
+      | Some 91, _ ->
 	mode := `Relative;
 	G91rel (Lazy.force rest)
-      | Some 0 ->
+      | Some 0, feedrate ->
 	update_positions ();
-	(Move { move_reg = G0; move_pos = new_pos; move_rest = Lazy.force rest })
-      | Some 1 ->
+	(Move { move_reg = G0; move_pos = new_pos; move_rest = Lazy.force rest; move_feedrate = feedrate; })
+      | Some 1, feedrate ->
 	update_positions ();
-	(Move { move_reg = G1; move_pos = new_pos; move_rest = Lazy.force rest})
-      | Some 2 when i <> None || j <> None ->
+	(Move { move_reg = G1; move_pos = new_pos; move_rest = Lazy.force rest; move_feedrate = feedrate; })
+      | Some 2, Some feedrate when i <> None || j <> None ->
 	update_positions ();
-	(ArcCenter { arc_reg = G2; arc_pos = new_pos; arc_offset = { ao_i = i; ao_j = j; }; arc_rest = Lazy.force rest })
-      | Some 3 when i <> None || j <> None ->
+	(ArcCenter { arc_reg = G2; arc_pos = new_pos; arc_offset = { ao_i = i; ao_j = j; }; arc_rest = Lazy.force rest; arc_feedrate = feedrate; })
+      | Some 3, Some feedrate when i <> None || j <> None ->
 	update_positions ();
-	(ArcCenter { arc_reg = G3; arc_pos = new_pos; arc_offset = { ao_i = i; ao_j = j; }; arc_rest = Lazy.force rest })
-      | Some 92 ->
+	(ArcCenter { arc_reg = G3; arc_pos = new_pos; arc_offset = { ao_i = i; ao_j = j; }; arc_rest = Lazy.force rest; arc_feedrate = feedrate; })
+      | Some 92, _ ->
 	update_positions ();
 	G92 (new_pos, Lazy.force rest)
       | _ -> 
@@ -249,7 +255,12 @@ let string_of_input ?(machine_state = default_machine_state) word =
 	[]
     )
   in
-  let coord_cmd label at rest =
+  let string_of_opt_float key value =
+    Option.default "" @@
+      flip Option.map value @@ fun v ->
+	key ^ string_of_gfloat v
+  in
+  let coord_cmd label at rest feedrate =
     (* this logic doesn't work. TODO: working elimination of redundant information *)
     (* label ^  *)
     (*   List.map  *)
@@ -257,18 +268,14 @@ let string_of_input ?(machine_state = default_machine_state) word =
     (* 	if AxisMap.mem )  *)
     (*   at *)
     (*   label ^ f "X" x_opt x_opt' ^ f "Y" y_opt y_opt' ^ f "Z" z_opt z_opt' ^ f "E" e_opt e_opt' ^ " " ^ rest *)
-    label ^ string_of_coords at
+    label ^ string_of_coords at ^ string_of_opt_float "F" feedrate 
   in
-  let arc_cmd label at center rest =
-    let string_of_opt_float key value =
-      Option.default "" @@
-	flip Option.map value @@ fun v ->
-	  key ^ string_of_gfloat v
-    in	
+  let arc_cmd label at center rest arc_feedrate =
     label 
     ^ string_of_coords at
     ^ string_of_opt_float "I" center.ao_i 
-    ^ string_of_opt_float "I" center.ao_j
+    ^ string_of_opt_float "J" center.ao_j
+    ^ string_of_opt_float "F" arc_feedrate
     ^ " " ^ rest
   in
   let string_of_command = function
@@ -314,11 +321,11 @@ let string_of_input ?(machine_state = default_machine_state) word =
   in
   let str, machine_state =
     match word with
-    | Move { move_reg = (G0 | G1); move_pos = at; move_rest = rest }-> 
-      (coord_cmd (string_of_command word) at rest, update_ms_coords machine_state at)
-    | ArcCenter { arc_reg = (G2 | G3); arc_pos = at; arc_offset = center; arc_rest = rest } -> 
-      arc_cmd (string_of_command word) at center rest, update_ms_coords machine_state at
-    | G92 (at, rest) -> (coord_cmd "G92" at rest, update_ms_coords machine_state at)
+    | Move { move_reg = (G0 | G1); move_pos = at; move_rest = rest; move_feedrate }-> 
+      (coord_cmd (string_of_command word) at rest move_feedrate, update_ms_coords machine_state at)
+    | ArcCenter { arc_reg = (G2 | G3); arc_pos = at; arc_offset = center; arc_rest = rest; arc_feedrate } -> 
+      (arc_cmd (string_of_command word) at center rest (Some arc_feedrate), update_ms_coords machine_state at)
+    | G92 (at, rest) -> (coord_cmd "G92" at rest None, update_ms_coords machine_state at)
     | G90abs rest -> ("G90 " ^ rest, machine_state)
     | G91rel rest -> ("G91 " ^ rest, machine_state)
     | Other str -> (str, machine_state)
