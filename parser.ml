@@ -33,9 +33,22 @@ type arc_offset = {
   ao_j : float option;
 }
 
+type move = {
+  move_reg  : move_reg;
+  move_pos  : position;
+  move_rest : rest;
+}
+
+type arc = {
+  arc_reg    : arc_reg;
+  arc_pos    : position;
+  arc_offset : arc_offset;
+  arc_rest   : rest;
+}
+
 type word =
-| Move of (move_reg * position * rest)
-| ArcCenter of (arc_reg * position * arc_offset * rest)
+| Move of move
+| ArcCenter of arc
 | G90abs of rest
 | G91rel of rest
 | G92 of (position * rest)
@@ -144,7 +157,7 @@ let parse_gcode ?machine_state lex_input =
 	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg register_chars -> false | _ -> true) words in
 	  String.concat "" **> List.rev_map string_of_token r
       ) in
-    let new_at = 
+    let new_pos = 
       match !mode with
 	| `Absolute -> 
 	  List.fold_left (fun at (axis, value) -> AxisMap.add axis value at) !prev_at at
@@ -155,7 +168,7 @@ let parse_gcode ?machine_state lex_input =
 	      AxisMap.add axis (old_value +. value) at
 	  ) !prev_at at
     in
-    let update_positions () = prev_at := new_at in
+    let update_positions () = prev_at := new_pos in
     let value =
       match cur_move_g with
       | Some 90 ->
@@ -166,19 +179,19 @@ let parse_gcode ?machine_state lex_input =
 	G91rel (Lazy.force rest)
       | Some 0 ->
 	update_positions ();
-	(Move (G0, new_at, Lazy.force rest))
+	(Move { move_reg = G0; move_pos = new_pos; move_rest = Lazy.force rest })
       | Some 1 ->
 	update_positions ();
-	(Move (G1, new_at, Lazy.force rest))
+	(Move { move_reg = G1; move_pos = new_pos; move_rest = Lazy.force rest})
       | Some 2 when i <> None || j <> None ->
 	update_positions ();
-	(ArcCenter (G2, new_at, { ao_i = i; ao_j = j; }, Lazy.force rest))
+	(ArcCenter { arc_reg = G2; arc_pos = new_pos; arc_offset = { ao_i = i; ao_j = j; }; arc_rest = Lazy.force rest })
       | Some 3 when i <> None || j <> None ->
 	update_positions ();
-	(ArcCenter (G3, new_at, { ao_i = i; ao_j = j; }, Lazy.force rest))
+	(ArcCenter { arc_reg = G3; arc_pos = new_pos; arc_offset = { ao_i = i; ao_j = j; }; arc_rest = Lazy.force rest })
       | Some 92 ->
 	update_positions ();
-	G92 (new_at, Lazy.force rest)
+	G92 (new_pos, Lazy.force rest)
       | _ -> 
 	Other (String.concat " " (List.rev_map string_of_token words))
     in
@@ -259,10 +272,10 @@ let string_of_input ?(machine_state = default_machine_state) word =
     ^ " " ^ rest
   in
   let string_of_command = function
-    | Move (G0, _, _) -> "G0"
-    | Move (G1, _, _) -> "G1"
-    | ArcCenter (G2, _, _, _) -> "G2"
-    | ArcCenter (G3, _, _, _) -> "G3"
+    | Move { move_reg = G0 } -> "G0"
+    | Move { move_reg = G1 } -> "G1"
+    | ArcCenter { arc_reg = G2 } -> "G2"
+    | ArcCenter { arc_reg = G3 } -> "G3"
     | G92 _ -> "G92"
     | G90abs _ -> "G92"
     | G91rel _ -> "G92"
@@ -301,9 +314,10 @@ let string_of_input ?(machine_state = default_machine_state) word =
   in
   let str, machine_state =
     match word with
-    | Move ((G0 | G1), at, rest) -> 
+    | Move { move_reg = (G0 | G1); move_pos = at; move_rest = rest }-> 
       (coord_cmd (string_of_command word) at rest, update_ms_coords machine_state at)
-    | ArcCenter ((G2 | G3), at, center, rest) -> (arc_cmd (string_of_command word) at center rest, update_ms_coords machine_state at)
+    | ArcCenter { arc_reg = (G2 | G3); arc_pos = at; arc_offset = center; arc_rest = rest } -> 
+      arc_cmd (string_of_command word) at center rest, update_ms_coords machine_state at
     | G92 (at, rest) -> (coord_cmd "G92" at rest, update_ms_coords machine_state at)
     | G90abs rest -> ("G90 " ^ rest, machine_state)
     | G91rel rest -> ("G91 " ^ rest, machine_state)

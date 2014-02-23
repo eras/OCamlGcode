@@ -22,15 +22,28 @@ type arc_offset = {
   ao_j : float option;
 }
 
-val default_machine_state : machine_state
+type move = {
+  move_reg  : move_reg;
+  move_pos  : position;
+  move_rest : rest;
+}
+
+type arc = {
+  arc_reg    : arc_reg;
+  arc_pos    : position;
+  arc_offset : arc_offset;
+  arc_rest   : rest;
+}
 
 type word =
-| Move of (move_reg * position * rest)
-| ArcCenter of (arc_reg * position * arc_offset * rest)
+| Move of move
+| ArcCenter of arc
 | G90abs of rest
 | G91rel of rest
 | G92 of (position * rest)
 | Other of string
+
+val default_machine_state : machine_state
 
 val string_of_gfloat : float -> string
 
