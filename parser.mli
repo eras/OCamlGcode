@@ -13,7 +13,8 @@ module AxisMap : Map.S with type key = axis
 type position = float AxisMap.t
 
 type machine_state = {
-  ms_coord_mode : [`Absolute | `Relative]
+  ms_coord_mode : [`Absolute | `Relative];
+  ms_position	: position;
 }
 
 type arc_offset = {

@@ -19,11 +19,13 @@ type move = G0 | G1
 type arc = G2 | G3
 
 type machine_state = {
-  ms_coord_mode : [`Absolute | `Relative]
+  ms_coord_mode : [`Absolute | `Relative];
+  ms_position	: position;
 }
 
 let default_machine_state = {
-  ms_coord_mode = `Absolute
+  ms_coord_mode = `Absolute;
+  ms_position   = AxisMap.empty;
 }
 
 type arc_offset = {
@@ -230,15 +232,55 @@ let string_of_input ?(machine_state = default_machine_state) word =
     ^ string_of_opt_float "I" center.ao_j
     ^ " " ^ rest
   in
-  let str =
+  let string_of_command = function
+    | Move (G0, _, _) -> "G0"
+    | Move (G1, _, _) -> "G1"
+    | ArcCenter (G2, _, _, _) -> "G2"
+    | ArcCenter (G3, _, _, _) -> "G3"
+    | G92 _ -> "G92"
+    | G90abs _ -> "G92"
+    | G91rel _ -> "G92"
+    | Other str -> failwith ("string_of_command not implemented for " ^ str)
+  in
+  let update_ms_coords machine_state at =
+    match machine_state.ms_coord_mode with
+    | `Absolute -> 
+      let at = 
+	AxisMap.fold
+	  (fun axis value at ->
+	    if AxisMap.mem axis at
+	    then at
+	    else AxisMap.add axis value at 
+	  )
+	  machine_state.ms_position
+	  at
+      in
+      { machine_state with 
+	ms_position = at
+      }
+    | `Relative ->
+      let at = 
+	AxisMap.fold
+	  (fun axis value at ->
+	    if not (AxisMap.mem axis at)
+	    then (failwith "Cannot handle relative move without all current known axis")
+	    else AxisMap.add axis (AxisMap.find axis at +. value) at 
+	  )
+	  machine_state.ms_position
+	  at
+      in
+      { machine_state with 
+	ms_position = at
+      }
+  in
+  let str, machine_state =
     match word with
-    | Move (G0, at, rest) -> coord_cmd "G0" at rest
-    | Move (G1, at, rest) -> coord_cmd "G1" at rest
-    | ArcCenter (G2, at, center, rest) -> arc_cmd "G2" at center rest
-    | ArcCenter (G3, at, center, rest) -> arc_cmd "G3" at center rest
-    | G92 (at, rest) -> coord_cmd "G92" at rest
-    | G90abs rest -> "G90 " ^ rest
-    | G91rel rest -> "G91 " ^ rest
-    | Other str -> str
+    | Move ((G0 | G1), at, rest) -> 
+      (coord_cmd (string_of_command word) at rest, update_ms_coords machine_state at)
+    | ArcCenter ((G2 | G3), at, center, rest) -> (arc_cmd (string_of_command word) at center rest, update_ms_coords machine_state at)
+    | G92 (at, rest) -> (coord_cmd "G92" at rest, update_ms_coords machine_state at)
+    | G90abs rest -> ("G90 " ^ rest, machine_state)
+    | G91rel rest -> ("G91 " ^ rest, machine_state)
+    | Other str -> (str, machine_state)
   in
   (str, machine_state)
