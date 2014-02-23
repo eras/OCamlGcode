@@ -14,7 +14,7 @@
 
 rule token = parse
   | (['a'-'z' 'A' - 'Z'] as reg) (['0'-'9' '.' '-']* as value)
-      { Entry (reg, 
+      { Entry (Char.uppercase reg,
 	       if Pcre.pmatch ~pat:"\\." value
 	       then Float (float_of_string value)
 	       else Int (int_of_string value)) }
