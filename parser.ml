@@ -14,9 +14,9 @@ type position = float AxisMap.t
 
 type rest = string
 
-type move = G0 | G1
+type move_reg = G0 | G1
 
-type arc = G2 | G3
+type arc_reg = G2 | G3
 
 type machine_state = {
   ms_coord_mode : [`Absolute | `Relative];
@@ -34,8 +34,8 @@ type arc_offset = {
 }
 
 type word =
-| Move of (move * position * rest)
-| ArcCenter of (arc * position * arc_offset * rest)
+| Move of (move_reg * position * rest)
+| ArcCenter of (arc_reg * position * arc_offset * rest)
 | G90abs of rest
 | G91rel of rest
 | G92 of (position * rest)
