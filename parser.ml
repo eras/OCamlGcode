@@ -83,6 +83,8 @@ let axis, axis_chars = List.split axis_symbols
 
 let register_symbols = axis_symbols @ [(`G, 'G'); (`M, 'M'); (`T, 'T'); (`I, 'I'); (`J, 'J')]
 
+let move_g_values = [0; 1; 2; 3; 90; 91; 92] (* list of Gxx commands that affect device position *)
+
 let registers, register_chars = List.split register_symbols
 
 let char_of_register register = List.assoc register register_symbols
@@ -97,26 +99,49 @@ let parse_gcode ?machine_state lex_input =
   in
   let mode = ref `Absolute in
   let prev_at = ref AxisMap.empty in
-  let process accu =
+  let prev_move_g = ref None in
+  let process words =
     let get_float x = 
-      match Lnoexn.find (function Lexer.Entry (reg, _) when reg = x -> true | _ -> false) accu with
+      match Lnoexn.find (function Lexer.Entry (reg, _) when reg = x -> true | _ -> false) words with
 	| None -> None
 	| Some (Lexer.Entry (_, Lexer.Float value)) -> Some value
 	| Some (Lexer.Entry (_, Lexer.Int value)) -> Some (float_of_int value)
 	| Some _ -> assert false
     in
-    let is_g n = List.mem (Lexer.Entry ('G', Lexer.Int n)) accu in
     let at = List.filter_map (
       fun (symbol, char) ->
 	match get_float char with
 	| None -> None
 	| Some x -> Some (symbol, x)
     ) axis_symbols in
+    let has_op = 			(* has g or m-code *)
+      List.exists (function
+      | Lexer.Entry (('G' | 'M'), _) -> true
+      | _ -> false
+      ) words
+    in
+    let cur_move_g = 
+      List.fold_left (
+	fun cur_move_g x ->
+	  match x with
+	  | Lexer.Entry ('G', Lexer.Int n) -> Some n
+	  | Lexer.Entry ('G', Lexer.Float f) when abs_float (fst (modf f)) < 0.0001 -> Some (truncate f)
+	  | _ -> cur_move_g
+      )
+	None
+	words
+    in
+    let cur_move_g =
+      match cur_move_g, has_op with
+      | Some move, _ -> cur_move_g
+      | None, true   -> None
+      | None, false  -> !prev_move_g
+    in
     let i = get_float 'I' in
     let j = get_float 'J' in
     let rest = 
       lazy (
-	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg register_chars -> false | _ -> true) accu in
+	let r = List.filter (function Lexer.Entry (reg, _) when List.mem reg register_chars -> false | _ -> true) words in
 	  String.concat "" **> List.rev_map string_of_token r
       ) in
     let new_at = 
@@ -132,32 +157,33 @@ let parse_gcode ?machine_state lex_input =
     in
     let update_positions () = prev_at := new_at in
     let value =
-      match 0 with
-      | _ when is_g 90 -> 
+      match cur_move_g with
+      | Some 90 ->
 	mode := `Absolute;
 	G90abs (Lazy.force rest)
-      | _ when is_g 91 ->
+      | Some 91 ->
 	mode := `Relative;
 	G91rel (Lazy.force rest)
-      | _ when is_g 0 ->
+      | Some 0 ->
 	update_positions ();
 	(Move (G0, new_at, Lazy.force rest))
-      | _ when is_g 1 ->
+      | Some 1 ->
 	update_positions ();
 	(Move (G1, new_at, Lazy.force rest))
-      | _ when is_g 2 && (i <> None || j <> None) ->
+      | Some 2 when i <> None || j <> None ->
 	update_positions ();
 	(ArcCenter (G2, new_at, { ao_i = i; ao_j = j; }, Lazy.force rest))
-      | _ when is_g 3 && (i <> None || j <> None) ->
+      | Some 3 when i <> None || j <> None ->
 	update_positions ();
 	(ArcCenter (G3, new_at, { ao_i = i; ao_j = j; }, Lazy.force rest))
-      | _ when is_g 92 ->
+      | Some 92 ->
 	update_positions ();
 	G92 (new_at, Lazy.force rest)
       | _ -> 
-	Other (String.concat " " (List.rev_map string_of_token accu))
+	Other (String.concat " " (List.rev_map string_of_token words))
     in
-      value
+    prev_move_g := cur_move_g;
+    value
   in
   let rec loop accu =
     match !next with
