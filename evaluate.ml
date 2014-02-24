@@ -179,6 +179,13 @@ let entry_words_of_words (words : word list) =
     init_entry_words
     words
 
+let motion_of_commands : command list -> g_motion option = fun commands ->
+  let motions = BatList.filter_map (function #g_motion as m -> Some m | _ -> None) commands in
+  match motions with
+  | [] -> None
+  | [motion] -> Some motion
+  | _ -> failwith "Too many motions in one command list"
+
 module FilterMap (S : Map.S) (T : Map.S) = struct
   let filter_map f m =
     S.fold (
