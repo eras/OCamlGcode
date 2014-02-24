@@ -18,7 +18,7 @@ let group_of_gm : gm -> group = function
 |  `M7 |  `M8 | `M9 -> `Coolant
 | `M48 | `M49 -> `Override
 
-let command_of_g_value (reg, value) = 
+let gm_of_reg_value : ([ `G | `M ] * float) -> gm = fun (reg, value) ->
   match reg, truncate (value *. 1000.0 +. 0.5) with
   | `G,  0000  -> `G0
   | `G,  1000  -> `G1
@@ -88,6 +88,92 @@ let command_of_g_value (reg, value) =
   | `M, 60000 -> `M60
   | _ -> failwith ("unknwon command")
 
+let reg_value_of_gm : gm -> ([ `G | `M ] * float) = function
+  | `G0 -> `G,  0.000
+  | `G1 -> `G,  1.000
+  | `G2 -> `G,  2.000
+  | `G3 -> `G,  3.000
+  | `G4 -> `G,  4.000
+  | `G10 -> `G, 10.000
+  | `G17 -> `G, 17.000
+  | `G18 -> `G, 18.000
+  | `G19 -> `G, 19.000
+  | `G20 -> `G, 20.000
+  | `G21 -> `G, 21.000
+  | `G28 -> `G, 28.000
+  | `G30 -> `G, 30.000
+  | `G38_2 -> `G, 38.200
+  | `G40 -> `G, 40.000
+  | `G41 -> `G, 41.000
+  | `G42 -> `G, 42.000
+  | `G43 -> `G, 43.000
+  | `G49 -> `G, 49.000
+  | `G53 -> `G, 53.000
+  | `G54 -> `G, 54.000
+  | `G55 -> `G, 55.000
+  | `G56 -> `G, 56.000
+  | `G57 -> `G, 57.000
+  | `G58 -> `G, 58.000
+  | `G59 -> `G, 59.000
+  | `G59_1 -> `G, 59.100
+  | `G59_2 -> `G, 59.200
+  | `G59_3 -> `G, 59.300
+  | `G61 -> `G, 61.000
+  | `G61_1 -> `G, 61.100
+  | `G64 -> `G, 64.000
+  | `G80 -> `G, 80.000
+  | `G81 -> `G, 81.000
+  | `G82 -> `G, 82.000
+  | `G83 -> `G, 83.000
+  | `G84 -> `G, 84.000
+  | `G85 -> `G, 85.000
+  | `G86 -> `G, 86.000
+  | `G87 -> `G, 87.000
+  | `G88 -> `G, 88.000
+  | `G89 -> `G, 89.000
+  | `G90 -> `G, 90.000
+  | `G91 -> `G, 91.000
+  | `G92 -> `G, 92.000
+  | `G92_1 -> `G, 92.100
+  | `G92_2 -> `G, 92.200
+  | `G92_3 -> `G, 92.300
+  | `G93 -> `G, 93.000
+  | `G94 -> `G, 94.000
+  | `G98 -> `G, 98.000
+  | `G99 -> `G, 99.000
+  | `M0 -> `M,  0.000
+  | `M1 -> `M,  1.000
+  | `M2 -> `M,  2.000
+  | `M6 -> `M,  6.000
+  | `M3 -> `M,  3.000
+  | `M4 -> `M,  4.000
+  | `M5 -> `M,  5.000
+  | `M7 -> `M,  7.000
+  | `M8 -> `M,  8.000
+  | `M9 -> `M,  9.000
+  | `M30 -> `M, 30.000
+  | `M48 -> `M, 48.000
+  | `M49 -> `M, 49.000
+  | `M60 -> `M, 60.000
+
+let string_of_gfloat f =
+  let str = Printf.sprintf "%.5f" f in
+  let last_non_zero =
+    let rec find_last_nonzero ofs = 
+      if ofs < 0
+      then None
+      else if str.[ofs] <> '0'
+      then Some ofs
+      else find_last_nonzero (ofs - 1)
+    in
+    find_last_nonzero (String.length str - 1)
+  in
+  ( match last_non_zero with
+  | None -> str
+  | Some ofs when str.[ofs] = '.' -> String.sub str 0 ofs
+  | Some ofs -> String.sub str 0 (ofs + 1)
+  )
+
 let init_position =
   List.fold_left
     (fun axisMap axis -> AxisMap.add axis 0.0 axisMap)
@@ -98,13 +184,13 @@ let init_regs_with_axis =
   List.fold_left
     (fun regMap init -> RegWithAxisMap.add init 0.0 regMap)
     RegWithAxisMap.empty
-    axis
+    regs_with_axis
 
 let init_regs_no_axis =
   List.fold_left
     (fun regMap init -> RegNoAxisMap.add init 0.0 regMap)
     RegNoAxisMap.empty
-    axis
+    regs_no_axis
 
 let init_entry_words = {
   ew_g_nonmodal                   = None;
@@ -163,7 +249,7 @@ let entry_words_of_words (words : word list) =
     (fun ews ((reg, value) : word) ->
       match reg with
       | (`G | `M) as reg ->
-        ( match command_of_g_value (reg, value) with
+        ( match gm_of_reg_value (reg, value) with
         | #g_nonmodal                   as cmd -> check ews.ew_g_nonmodal                   { ews with ew_g_nonmodal                   = Some cmd }
         | #g_motion                     as cmd -> check ews.ew_g_motion                     { ews with ew_g_motion                     = Some cmd }
         | #g_plane                      as cmd -> check ews.ew_g_plane                      { ews with ew_g_plane                      = Some cmd }
@@ -204,6 +290,11 @@ module FilterMap (S : Map.S) (T : Map.S) = struct
     ) m T.empty
 end
 
+module ListOfMap (S : Map.S) = struct
+  let list_of_map m =
+    List.rev (S.fold (fun key value result -> (key, value)::result) m [])
+end
+
 let replace_regs regs0 regs1 =
   RegNoAxisMap.fold
     RegNoAxisMap.add
@@ -224,7 +315,7 @@ let add_axis_relative axis0 axis1 =
     axis1
     axis0
 
-let string_of_word (reg_all, value) = Printf.sprintf "%c%f" (char_of_reg_cmd reg_all) value
+let string_of_word (reg_all, value) = Printf.sprintf "%c%s" (char_of_reg_cmd reg_all) (string_of_gfloat value)
 
 let string_of_word_list word_list = List.map string_of_word word_list |> String.concat " "
 
@@ -309,3 +400,64 @@ let evaluate_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> step_res
 	  evaluate_step !machine_state (List.rev accu)
     in
     BatEnum.from (fun () -> loop [])
+
+let ms_g_motion x = x.ms_g_motion
+let ms_g_plane x = x.ms_g_plane
+let ms_g_distance x = x.ms_g_distance
+let ms_g_feed_rate x = x.ms_g_feed_rate
+let ms_g_units x = x.ms_g_units
+let ms_g_cutter_radius_compensation x = x.ms_g_cutter_radius_compensation
+let ms_g_length_offset x = x.ms_g_length_offset
+let ms_g_return_mode x = x.ms_g_return_mode
+let ms_g_coordinate_system x = x.ms_g_coordinate_system
+let ms_g_path_control x = x.ms_g_path_control
+
+let word_list_of_step_result : step_result -> word list =
+  fun sr ->
+    let a = sr.sr_state0 in
+    let b = sr.sr_state1 in
+    let cast_rv (reg, value) =
+      ((reg :> reg_all), value)
+    in
+    let g f = 
+      if ((f a) :> gm) <> ((f b) :> gm) then
+        [cast_rv (reg_value_of_gm ((f b) :> gm))]
+      else
+        []
+    in
+    let words = [] in
+    let filter_different a b =
+      BatList.filter_map BatPervasives.identity (BatList.map2 (fun a b -> if a <> b then Some b else None) a b)
+    in
+    let words =
+      assert (a.ms_g_distance = `G90);  (* relative distances not supported yet *)
+      let module LOM = ListOfMap(AxisMap) in
+      let a' = LOM.list_of_map a.ms_position in
+      let b' = LOM.list_of_map b.ms_position in
+      words @ List.map cast_rv (filter_different a' b')
+    in
+    let words =
+      let module LOM = ListOfMap(RegNoAxisMap) in
+      let a' = LOM.list_of_map a.ms_regs in
+      let b' = LOM.list_of_map b.ms_regs in
+      words @ List.map cast_rv (filter_different a' b')
+    in
+    let words =
+      g ms_g_motion @
+        g ms_g_plane @
+        g ms_g_distance @
+        g ms_g_feed_rate @
+        g ms_g_units @
+        g ms_g_cutter_radius_compensation @
+        g ms_g_length_offset @
+        g ms_g_return_mode @
+        g ms_g_coordinate_system @
+        g ms_g_path_control @
+        words
+    in 
+    words
+
+let string_of_step_result : step_result -> string =
+  fun sr -> string_of_word_list (word_list_of_step_result sr)
+
+

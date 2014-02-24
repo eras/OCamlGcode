@@ -14,7 +14,7 @@ let regs_with_axis = axis @ regs_no_axis
 type reg_all = [ reg_with_axis | `G | `M ]
 let reg_all = regs_with_axis @ [ `G; `M ]
 
-let reg_cmd_of_char = function
+let reg_cmd_of_char : char -> reg_all = function
   | 'X' -> `X
   | 'Y' -> `Y
   | 'Z' -> `Z
@@ -38,7 +38,7 @@ let reg_cmd_of_char = function
   | 'M' -> `M
   | ch -> failwith ("Unsupported register: " ^ String.make 1 ch)
 
-let char_of_reg_cmd = function
+let char_of_reg_cmd : reg_all -> char = function
   | `X -> 'X'
   | `Y -> 'Y'
   | `Z -> 'Z'
@@ -71,8 +71,8 @@ module RegWithAxis     = struct type t = reg_with_axis let compare = compare end
 module RegWithAxisMap  = BatMap.Make(struct type t = reg_with_axis let compare = compare end)
 type regs_with_axis    = float RegWithAxisMap.t
 
-module RegNoAxis     = struct type t = reg_with_axis let compare = compare end
-module RegNoAxisMap  = BatMap.Make(struct type t = reg_with_axis let compare = compare end)
+module RegNoAxis     = struct type t = reg_no_axis let compare = compare end
+module RegNoAxisMap  = BatMap.Make(struct type t = reg_no_axis let compare = compare end)
 type regs_no_axis    = float RegNoAxisMap.t
 
 type word = reg_all * float
