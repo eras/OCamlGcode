@@ -218,6 +218,10 @@ let add_axis_relative axis0 axis1 =
     axis1
     axis0
 
+let string_of_word (reg_cmd, value) = Printf.sprintf "%c%f" (char_of_reg_cmd reg_cmd) value
+
+let string_of_word_list word_list = List.map string_of_word word_list |> String.concat " "
+
 let evaluate_step : machine_state -> word list -> step_result =
   fun state words ->
     let default = BatOption.default in
@@ -236,8 +240,8 @@ let evaluate_step : machine_state -> word list -> step_result =
       | Some nonmodal, None, _ -> [(nonmodal :> command)]
       | None, Some motion, _ when not (AxisMap.is_empty axis) -> [(motion :> command)]
       | None, None, motion when not (AxisMap.is_empty axis) -> [(motion :> command)]
-      | None, None, _ -> []
-      | _ -> failwith "Colliding axis-using nonmodal and modal commands"
+      | None, None, _                                       -> []
+      | _ -> failwith ("Colliding axis-using nonmodal and modal commands: " ^ string_of_word_list words)
     in
     let position =
       let movement =
