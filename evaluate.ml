@@ -391,13 +391,17 @@ let evaluate_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> step_res
 	match Lexer.token lex_input with
 	| Lexer.Eof -> 
 	  next := Some eof;
-	  evaluate_step !machine_state (List.rev accu)
+	  let sr = evaluate_step !machine_state (List.rev accu) in
+          machine_state := sr.sr_state1;
+          sr
 	| Lexer.Entry entry ->
 	  loop (word_of_entry entry::accu)
 	| Lexer.Comment _ ->
 	  loop accu
 	| Lexer.Eol ->
-	  evaluate_step !machine_state (List.rev accu)
+	  let sr = evaluate_step !machine_state (List.rev accu) in
+          machine_state := sr.sr_state1;
+          sr
     in
     BatEnum.from (fun () -> loop [])
 
