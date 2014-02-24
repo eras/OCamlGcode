@@ -5,11 +5,14 @@ type coord_mode =
 type axis = [ `X | `Y | `Z | `E | `A | `B | `C ]
 let axis = [ `X; `Y; `Z; `E; `A; `B; `C ]
 
-type reg = [ axis | `I | `J | `F | `T | `S | `K | `D | `L | `R | `N | `P | `Q ]
-let regs = axis @ [ `I; `J; `F; `T; `S; `K; `D; `L; `R; `N; `P; `Q ]
+type reg_no_axis = [ `I | `J | `F | `T | `S | `K | `D | `L | `R | `N | `P | `Q ]
+let regs_no_axis = [ `I; `J; `F; `T; `S; `K; `D; `L; `R; `N; `P; `Q ]
 
-type reg_cmd = [ reg | `G | `M ]
-let reg_cmd = regs @ [ `G; `M ]
+type reg_with_axis = [ axis | reg_no_axis ]
+let regs_with_axis = axis @ regs_no_axis
+
+type reg_all = [ reg_with_axis | `G | `M ]
+let reg_all = regs_with_axis @ [ `G; `M ]
 
 let reg_cmd_of_char = function
   | 'X' -> `X
@@ -64,11 +67,15 @@ module Axis    = struct type t = axis let compare = compare end
 module AxisMap = BatMap.Make(struct type t = axis let compare = compare end)
 type position  = float AxisMap.t
 
-module Reg     = struct type t = reg let compare = compare end
-module RegMap  = BatMap.Make(struct type t = reg let compare = compare end)
-type regs      = float RegMap.t
+module RegWithAxis     = struct type t = reg_with_axis let compare = compare end
+module RegWithAxisMap  = BatMap.Make(struct type t = reg_with_axis let compare = compare end)
+type regs_with_axis    = float RegWithAxisMap.t
 
-type word = reg_cmd * float
+module RegNoAxis     = struct type t = reg_with_axis let compare = compare end
+module RegNoAxisMap  = BatMap.Make(struct type t = reg_with_axis let compare = compare end)
+type regs_no_axis    = float RegNoAxisMap.t
+
+type word = reg_all * float
 
 (* group 0 = {G4, G10, G28, G30, G53, G92, G92.1, G92.2, G92.3} *)
 type g_nonmodal                   = [`G4 | `G10 | `G28 | `G30 | `G53 | `G92 | `G92_1 | `G92_2 | `G92_3]
@@ -146,12 +153,13 @@ type entry_words = {
   ew_m_coolant                    : m_coolant option;
   ew_m_override                   : m_override option;
 
-  ew_regs                         : regs;
+  ew_axis                         : position;
+  ew_regs                         : regs_no_axis;
 }
 
 type machine_state = {
   ms_position                     : position;
-  ms_regs                         : regs;
+  ms_regs                         : regs_no_axis;
 
   ms_g_motion                     : g_motion;
   ms_g_plane                      : g_plane;
@@ -212,6 +220,6 @@ type gm = [
 type step_result = {
   sr_state0   : machine_state;             (* machine state before evaluating this step *)
   sr_state1   : machine_state;             (* machine state after evaluating this step *)
-  sr_regs     : regs;                      (* register values from this line; basically the words *)
+  sr_regs     : regs_no_axis;              (* register values from this line; basically the words *)
   sr_commands : command list;              (* commands that were in effect when this line was evaluated *)
 }

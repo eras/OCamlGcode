@@ -94,10 +94,16 @@ let init_position =
     AxisMap.empty
     axis
 
-let init_regs =
+let init_regs_with_axis =
   List.fold_left
-    (fun regMap init -> RegMap.add init 0.0 regMap)
-    RegMap.empty
+    (fun regMap init -> RegWithAxisMap.add init 0.0 regMap)
+    RegWithAxisMap.empty
+    axis
+
+let init_regs_no_axis =
+  List.fold_left
+    (fun regMap init -> RegNoAxisMap.add init 0.0 regMap)
+    RegNoAxisMap.empty
     axis
 
 let init_entry_words = {
@@ -120,12 +126,13 @@ let init_entry_words = {
   ew_m_coolant                    = None;
   ew_m_override                   = None;
 
-  ew_regs                         = RegMap.empty;
+  ew_axis                     = AxisMap.empty;
+  ew_regs                         = RegNoAxisMap.empty;
 }
 
 let init = {
   ms_position                     = init_position;
-  ms_regs                          = init_regs;
+  ms_regs                          = init_regs_no_axis;
   (* ms_feedrate                     = None; *)
 
   ms_g_motion                     = `G0;
@@ -174,7 +181,8 @@ let entry_words_of_words (words : word list) =
         | #m_coolant                    as cmd -> check ews.ew_m_coolant                    { ews with ew_m_coolant                    = Some cmd }
         | #m_override                   as cmd -> check ews.ew_m_override                   { ews with ew_m_override                   = Some cmd }
         )
-      | #reg as reg -> { ews with ew_regs = RegMap.add reg value ews.ew_regs }
+      | #axis as axis -> { ews with ew_axis = AxisMap.add axis value ews.ew_axis }
+      | #reg_no_axis as reg -> { ews with ew_regs = RegNoAxisMap.add reg value ews.ew_regs }
     )
     init_entry_words
     words
@@ -196,18 +204,9 @@ module FilterMap (S : Map.S) (T : Map.S) = struct
     ) m T.empty
 end
 
-let axis_of_regs regs =
-  let module M = FilterMap(RegMap)(AxisMap) in
-  M.filter_map (
-    fun key value ->
-      match key with
-      | #axis as axis -> Some (axis, value)
-      | #reg -> None
-  ) regs
-
 let replace_regs regs0 regs1 =
-  RegMap.fold
-    RegMap.add
+  RegNoAxisMap.fold
+    RegNoAxisMap.add
     regs1
     regs0
 
@@ -225,7 +224,7 @@ let add_axis_relative axis0 axis1 =
     axis1
     axis0
 
-let string_of_word (reg_cmd, value) = Printf.sprintf "%c%f" (char_of_reg_cmd reg_cmd) value
+let string_of_word (reg_all, value) = Printf.sprintf "%c%f" (char_of_reg_cmd reg_all) value
 
 let string_of_word_list word_list = List.map string_of_word word_list |> String.concat " "
 
@@ -239,15 +238,14 @@ let evaluate_step : machine_state -> word list -> step_result =
       | Some x when List.mem x axis_word_using_nonmodal -> Some x
       | Some _ -> None
     in
-    let axis = axis_of_regs ews.ew_regs in
     let commands =
       match axis_word_using_nonmodal,
             ews.ew_g_motion, 
             state.ms_g_motion with
       | Some nonmodal, None, _ -> [(nonmodal :> command)]
-      | None, Some motion, _ when not (AxisMap.is_empty axis) -> [(motion :> command)]
+      | None, Some motion, _ when not (AxisMap.is_empty ews.ew_axis) -> [(motion :> command)]
       | None, Some motion, _                                  -> []
-      | None, None, motion when not (AxisMap.is_empty axis) -> [(motion :> command)]
+      | None, None, motion when not (AxisMap.is_empty ews.ew_axis) -> [(motion :> command)]
       | None, None, _                                       -> []
       | _ -> failwith ("Colliding axis-using nonmodal and modal commands: " ^ string_of_word_list words)
     in
@@ -257,7 +255,7 @@ let evaluate_step : machine_state -> word list -> step_result =
         | `G90 -> add_axis_absolute
         | `G91 -> add_axis_relative
       in
-      movement state.ms_position axis
+      movement state.ms_position ews.ew_axis
     in
     let state' = {
       ms_position                     = position;
