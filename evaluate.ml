@@ -246,6 +246,7 @@ let evaluate_step : machine_state -> word list -> step_result =
             state.ms_g_motion with
       | Some nonmodal, None, _ -> [(nonmodal :> command)]
       | None, Some motion, _ when not (AxisMap.is_empty axis) -> [(motion :> command)]
+      | None, Some motion, _                                  -> []
       | None, None, motion when not (AxisMap.is_empty axis) -> [(motion :> command)]
       | None, None, _                                       -> []
       | _ -> failwith ("Colliding axis-using nonmodal and modal commands: " ^ string_of_word_list words)
