@@ -1,4 +1,4 @@
-open Types
+include module type of Types
 
 val group_of_gm : gm -> group
 

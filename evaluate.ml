@@ -1,4 +1,4 @@
-open Types
+include Types
 
 let group_of_gm : gm -> group = function
 |  `G4 | `G10 | `G28 | `G30 |   `G53 | `G92 | `G92_1 | `G92_2 | `G92_3 -> `NonModal
