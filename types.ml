@@ -87,7 +87,7 @@ type g_motion                     = [`G0 | `G1 | `G2 | `G3 | `G38_2 | `G80 | `G8
 (* group 2 = {G17, G18, G19} plane selection *)
 type g_plane                      = [`G17 | `G18 | `G19]
 (* group 3 = {G90, G91} distance mode *)
-type g_distance                   = [`G90 | `G91]
+type g_distance                   = [`G90 | `G91 | `Gnodistance ]
 (* group 5 = {G93, G94} feed_rate mode *)
 type g_feed_rate                  = [`G93 | `G94]
 (* group 6 = {G20, G21} units *)
@@ -114,7 +114,7 @@ type m_coolant                    = [`M7 | `M8 | `M9]
 (* group 9 = {M48, M49} enable/disable feed and speed override switches *)
 type m_override                   = [`M48 | `M49]
 
-type inactions = [ `Mnotool ]
+type inactions = [ `Gnodistance | `Mnotool ]
 
 type group = [
 | `NonModal                             (* group 0 *)

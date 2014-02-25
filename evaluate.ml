@@ -4,7 +4,7 @@ let group_of_gm : gm -> group = function
 |  `G4 | `G10 | `G28 | `G30 |   `G53 | `G92 | `G92_1 | `G92_2 | `G92_3 -> `NonModal
 |  `G0 |  `G1 |  `G2 |  `G3 | `G38_2 | `G80 |   `G81 |   `G82 | `G83 | `G84 | `G85 | `G86 | `G87 | `G88 | `G89 -> `Motion
 | `G17 | `G18 | `G19 -> `Plane
-| `G90 | `G91 -> `Distance
+| `G90 | `G91 | `Gnodistance -> `Distance
 | `G93 | `G94 -> `FeedRate
 | `G20 | `G21 -> `Units
 | `G40 | `G41 | `G42 -> `CutterRadiusCompensation
@@ -133,6 +133,7 @@ let reg_value_of_gm : gm -> ([ `G | `M ] * float) = function
   | `G89 -> `G, 89.000
   | `G90 -> `G, 90.000
   | `G91 -> `G, 91.000
+  | `Gnodistance -> assert false
   | `G92 -> `G, 92.000
   | `G92_1 -> `G, 92.100
   | `G92_2 -> `G, 92.200
@@ -224,7 +225,7 @@ let init = {
 
   ms_g_motion                     = `G0;
   ms_g_plane                      = `G17;
-  ms_g_distance                   = `G90;
+  ms_g_distance                   = `Gnodistance;
   ms_g_feed_rate                  = `G94;
   ms_g_units                      = `G21;
   ms_g_cutter_radius_compensation = `G40;
@@ -352,6 +353,7 @@ let evaluate_step : machine_state -> word list -> step_result =
         match default state.ms_g_distance ews.ew_g_distance with
         | `G90 -> add_axis_absolute
         | `G91 -> add_axis_relative
+        | `Gnodistance -> add_axis_absolute
       in
       movement state.ms_position ews.ew_axis
     in
@@ -443,7 +445,7 @@ let word_list_of_step_result : step_result -> word list =
       BatList.filter_map BatPervasives.identity (BatList.map2 (fun a b -> if a <> b then Some b else None) a b)
     in
     let words =
-      assert (a.ms_g_distance = `G90);  (* relative distances not supported yet *)
+      assert (List.mem a.ms_g_distance [`G90; `Gnodistance]);  (* relative distances not supported yet *)
       let module LOM = ListOfMap(AxisMap) in
       let a' = LOM.list_of_map a.ms_position in
       let b' = LOM.list_of_map b.ms_position in
