@@ -3,10 +3,10 @@ include Types
 let group_of_gm : gm -> group = function
 |  `G4 | `G10 | `G28 | `G30 |   `G53 | `G92 | `G92_1 | `G92_2 | `G92_3 -> `NonModal
 |  `G0 |  `G1 |  `G2 |  `G3 | `G38_2 | `G80 |   `G81 |   `G82 | `G83 | `G84 | `G85 | `G86 | `G87 | `G88 | `G89 -> `Motion
-| `G17 | `G18 | `G19 -> `Plane
+| `G17 | `G18 | `G19 | `Gnoplane -> `Plane
 | `G90 | `G91 | `Gnodistance -> `Distance
 | `G93 | `G94 -> `FeedRate
-| `G20 | `G21 -> `Units
+| `G20 | `G21 | `Gnounits -> `Units
 | `G40 | `G41 | `G42 -> `CutterRadiusCompensation
 | `G43 | `G49 -> `LengthOffset
 | `G98 | `G99 -> `ReturnMode
@@ -98,8 +98,10 @@ let reg_value_of_gm : gm -> ([ `G | `M ] * float) = function
   | `G17 -> `G, 17.000
   | `G18 -> `G, 18.000
   | `G19 -> `G, 19.000
+  | `Gnoplane -> assert false
   | `G20 -> `G, 20.000
   | `G21 -> `G, 21.000
+  | `Gnounits -> assert false
   | `G28 -> `G, 28.000
   | `G30 -> `G, 30.000
   | `G38_2 -> `G, 38.200
@@ -224,10 +226,10 @@ let init = {
   (* ms_feedrate                     = None; *)
 
   ms_g_motion                     = `G0;
-  ms_g_plane                      = `G17;
+  ms_g_plane                      = `Gnoplane;
   ms_g_distance                   = `Gnodistance;
   ms_g_feed_rate                  = `G94;
-  ms_g_units                      = `G21;
+  ms_g_units                      = `Gnounits;
   ms_g_cutter_radius_compensation = `G40;
   ms_g_length_offset              = `G49;
   ms_g_return_mode                = `G99;

@@ -85,13 +85,13 @@ let axis_word_using_nonmodal      = [ `G10; `G28; `G30; `G92 ]
 (* group 1 = {G0, G1, G2, G3, G38.2, G80, G81, G82, G83, G84, G85, G86, G87, G88, G89} motion *)
 type g_motion                     = [`G0 | `G1 | `G2 | `G3 | `G38_2 | `G80 | `G81 | `G82 | `G83 | `G84 | `G85 | `G86 | `G87 | `G88 | `G89]
 (* group 2 = {G17, G18, G19} plane selection *)
-type g_plane                      = [`G17 | `G18 | `G19]
+type g_plane                      = [`G17 | `G18 | `G19 | `Gnoplane]
 (* group 3 = {G90, G91} distance mode *)
 type g_distance                   = [`G90 | `G91 | `Gnodistance ]
 (* group 5 = {G93, G94} feed_rate mode *)
 type g_feed_rate                  = [`G93 | `G94]
 (* group 6 = {G20, G21} units *)
-type g_units                      = [`G20 | `G21]
+type g_units                      = [`G20 | `G21 | `Gnounits ]
 (* group 7 = {G40, G41, G42} cutter_radius_compensation *)
 type g_cutter_radius_compensation = [`G40 | `G41 | `G42]
 (* group 8 = {G43, G49} tool length_offset *)
@@ -114,7 +114,7 @@ type m_coolant                    = [`M7 | `M8 | `M9]
 (* group 9 = {M48, M49} enable/disable feed and speed override switches *)
 type m_override                   = [`M48 | `M49]
 
-type inactions = [ `Gnodistance | `Mnotool ]
+type inactions = [ `Gnounits | `Gnodistance | `Mnotool ]
 
 type group = [
 | `NonModal                             (* group 0 *)
