@@ -161,7 +161,7 @@ let reg_value_of_gm : gm -> ([ `G | `M ] * float) = function
   | `M60 -> `M, 60.000
 
 let string_of_gfloat f =
-  let str = Printf.sprintf "%.8f" f in
+  let str = Printf.sprintf "%.4f" f in
   let last_non_zero =
     let rec find_last_nonzero ofs = 
       if ofs < 0
