@@ -13,7 +13,7 @@ let group_of_gm : gm -> group = function
 | `G54 | `G55   | `G56 | `G57 | `G58 | `G59 | `G59_1 | `G59_2 | `G59_3 -> `CoordinateSystem
 | `G61 | `G61_1 | `G64 -> `PathControl
 |  `M0 |  `M1   | `M2 | `M30 | `M60 -> `Stopping
-|  `M6 -> `Tool
+|  `M6 | `Mnotool -> `Tool
 |  `M3 |  `M4 | `M5 -> `Spindle
 |  `M7 |  `M8 | `M9 -> `Coolant
 | `M48 | `M49 -> `Override
@@ -145,6 +145,7 @@ let reg_value_of_gm : gm -> ([ `G | `M ] * float) = function
   | `M1 -> `M,  1.000
   | `M2 -> `M,  2.000
   | `M6 -> `M,  6.000
+  | `Mnotool -> assert false
   | `M3 -> `M,  3.000
   | `M4 -> `M,  4.000
   | `M5 -> `M,  5.000
@@ -232,7 +233,7 @@ let init = {
   ms_g_coordinate_system          = `G54;
   ms_g_path_control               = `G61;
   (* ms_m_stopping                   = m_stopping; *)
-  (* ms_m_tool                       = m_tool; *)
+  ms_m_tool                       = `Mnotool;
   (* ms_m_spindle                    = m_spindle; *)
   (* ms_m_coolant                    = m_coolant; *)
   (* ms_m_override                   = m_override; *)
@@ -340,6 +341,12 @@ let evaluate_step : machine_state -> word list -> step_result =
       | None, None, _                                       -> []
       | _ -> failwith ("Colliding axis-using nonmodal and modal commands: " ^ string_of_word_list words)
     in
+    let commands =
+      commands @
+      match ews.ew_m_tool with
+      | Some (#m_tool as m) -> [ m ]
+      | None -> []
+    in
     let position =
       let movement =
         match default state.ms_g_distance ews.ew_g_distance with
@@ -362,6 +369,8 @@ let evaluate_step : machine_state -> word list -> step_result =
       ms_g_return_mode                = default state.ms_g_return_mode                ews.ew_g_return_mode;
       ms_g_coordinate_system          = default state.ms_g_coordinate_system          ews.ew_g_coordinate_system;
       ms_g_path_control               = default state.ms_g_path_control               ews.ew_g_path_control;
+
+      ms_m_tool                       = default `Mnotool                              ews.ew_m_tool;
     } in
     { sr_state0   = state;
       sr_state1   = state';
@@ -470,5 +479,3 @@ let word_list_of_step_result : step_result -> word list =
 
 let string_of_step_result : step_result -> string =
   fun sr -> string_of_word_list (word_list_of_step_result sr)
-
-

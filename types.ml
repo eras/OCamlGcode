@@ -106,13 +106,15 @@ type g_path_control               = [`G61 | `G61_1 | `G64]
 (* group 4 = {M0, M1, M2, M30, M60} stopping *)
 type m_stopping                   = [`M0 | `M1 | `M2 | `M30 | `M60]
 (* group 6 = {M6} tool change *)
-type m_tool                       = [`M6]
+type m_tool                       = [`M6 | `Mnotool]
 (* group 7 = {M3, M4, M5} spindle turning *)
 type m_spindle                    = [`M3 | `M4 | `M5]
 (* group 8 = {M7, M8, M9} coolant (special case: M7 and M8 may be active at the same time) *)
 type m_coolant                    = [`M7 | `M8 | `M9]
 (* group 9 = {M48, M49} enable/disable feed and speed override switches *)
 type m_override                   = [`M48 | `M49]
+
+type inactions = [ `Mnotool ]
 
 type group = [
 | `NonModal                             (* group 0 *)
@@ -173,7 +175,7 @@ type machine_state = {
   ms_g_path_control               : g_path_control;
 
   (* ms_m_stopping                   : m_stopping; *)
-  (* ms_m_tool                       : m_tool; *)
+  ms_m_tool                       : m_tool;
   (* ms_m_spindle                    : m_spindle; *)
   (* ms_m_coolant                    : m_coolant; *)
   (* ms_m_override                   : m_override; *)
@@ -192,7 +194,7 @@ type command = [
 (* | g_coordinate_system *)
 (* | g_path_control *)
 (* | m_stopping *)
-(* | m_tool *)
+| m_tool
 (* | m_spindle *)
 (* | m_coolant *)
 (* | m_override *)
