@@ -455,16 +455,14 @@ let word_list_of_step_result : step_result -> word list =
       let b' = LOM.list_of_map b.ms_regs in
       words @ List.map cast_rv (filter_different a' b')
     in
-    let motion =
-      (* if F changes, let's re-do the move if there is none *)
-      match g ms_g_motion with
-      | [] when (RegNoAxisMap.find `F a.ms_regs <>  RegNoAxisMap.find `F b.ms_regs) ->
-        [cast_rv (reg_value_of_gm (b.ms_g_motion :> gm))]
-      | xs -> xs
+    let words =
+      words @
+        List.map
+        (fun x -> cast_rv (reg_value_of_gm (x :> gm)))
+        sr.sr_commands
     in
     let words =
-      motion @
-        g ms_g_plane @
+      g ms_g_plane @
         g ms_g_distance @
         g ms_g_feed_rate @
         g ms_g_units @
