@@ -180,19 +180,19 @@ let string_of_gfloat f =
 
 let init_position =
   List.fold_left
-    (fun axisMap axis -> AxisMap.add axis 0.0 axisMap)
+    (fun axisMap axis -> AxisMap.add axis nan axisMap)
     AxisMap.empty
     axis
 
 let init_regs_with_axis =
   List.fold_left
-    (fun regMap init -> RegWithAxisMap.add init 0.0 regMap)
+    (fun regMap init -> RegWithAxisMap.add init nan regMap)
     RegWithAxisMap.empty
     regs_with_axis
 
 let init_regs_no_axis =
   List.fold_left
-    (fun regMap init -> RegNoAxisMap.add init 0.0 regMap)
+    (fun regMap init -> RegNoAxisMap.add init nan regMap)
     RegNoAxisMap.empty
     regs_no_axis
 
@@ -444,7 +444,13 @@ let word_list_of_step_result : step_result -> word list =
     in
     let words = [] in
     let filter_different a b =
-      BatList.filter_map BatPervasives.identity (BatList.map2 (fun a b -> if a <> b then Some b else None) a b)
+      BatList.filter_map BatPervasives.identity (BatList.map2 (
+        fun (_, a) ((_, b) as value) ->
+          let isnan a = classify_float a = FP_nan in
+          if (if (isnan (a) || isnan b) then isnan a <> isnan b else (a <> b))
+          then Some value
+          else None
+      ) a b)
     in
     let words =
       assert (List.mem a.ms_g_distance [`G90; `Gnodistance]);  (* relative distances not supported yet *)
