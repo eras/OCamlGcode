@@ -240,6 +240,8 @@ let init = {
   (* ms_m_spindle                    = m_spindle; *)
   (* ms_m_coolant                    = m_coolant; *)
   (* ms_m_override                   = m_override; *)
+
+  ms_line_number                  = 0;
 }
 
 (* repeated entries within the group are forbidden, as in the G-code specs *)
@@ -323,8 +325,8 @@ let string_of_word (reg_all, value) = Printf.sprintf "%c%s" (char_of_reg_cmd reg
 
 let string_of_word_list word_list = List.map string_of_word word_list |> String.concat " "
 
-let evaluate_step : machine_state -> word list -> step_result =
-  fun state words ->
+let evaluate_step : machine_state -> word list -> line_number -> step_result =
+  fun state words line_number ->
     let default = BatOption.default in
     let ews = entry_words_of_words words in
     let axis_word_using_nonmodal = 
@@ -375,6 +377,8 @@ let evaluate_step : machine_state -> word list -> step_result =
       ms_g_path_control               = default state.ms_g_path_control               ews.ew_g_path_control;
 
       ms_m_tool                       = default `Mnotool                              ews.ew_m_tool;
+
+      ms_line_number = line_number;
     } in
     { sr_state0   = state;
       sr_state1   = state';
@@ -388,8 +392,9 @@ let word_of_entry (char, value) =
    | Lexer.Float x -> x)
 
 let evaluate_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> step_result BatEnum.t = 
-  fun ?(machine_state=init) lex_input->
+  fun ?(machine_state=init) lex_input ->
     let machine_state = ref machine_state in
+    let line_number = ref 0 in
     let next = ref None in
     let rec eof () =
       next := Some eof;
@@ -404,7 +409,7 @@ let evaluate_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> step_res
 	match Lexer.token lex_input with
 	| Lexer.Eof -> 
 	  next := Some eof;
-	  let sr = evaluate_step !machine_state (List.rev accu) in
+	  let sr = evaluate_step !machine_state (List.rev accu) !line_number in
           machine_state := sr.sr_state1;
           sr
 	| Lexer.Entry entry ->
@@ -412,7 +417,8 @@ let evaluate_gcode : ?machine_state : machine_state -> Lexing.lexbuf -> step_res
 	| Lexer.Comment _ ->
 	  loop accu
 	| Lexer.Eol ->
-	  let sr = evaluate_step !machine_state (List.rev accu) in
+	  let sr = evaluate_step !machine_state (List.rev accu) !line_number in
+          incr line_number;
           machine_state := sr.sr_state1;
           sr
     in
