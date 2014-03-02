@@ -2,7 +2,7 @@ type coord_mode =
 | CoordModeAbsolute
 | CoordModeRelative
 
-type line_number = int                  (* zero is the first line *)
+type line_number = int                  (* 1 is the first line *)
 
 type axis = [ `X | `Y | `Z | `E | `A | `B | `C ]
 let axis = [ `X; `Y; `Z; `E; `A; `B; `C ]
@@ -182,7 +182,7 @@ type machine_state = {
   (* ms_m_coolant                    : m_coolant; *)
   (* ms_m_override                   : m_override; *)
 
-  ms_line_number                  : line_number;
+  ms_orig_line_number             : line_number;
 }
 
 type command = [

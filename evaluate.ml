@@ -241,7 +241,7 @@ let init = {
   (* ms_m_coolant                    = m_coolant; *)
   (* ms_m_override                   = m_override; *)
 
-  ms_line_number                  = 0;
+  ms_orig_line_number             = 1;
 }
 
 (* repeated entries within the group are forbidden, as in the G-code specs *)
@@ -378,7 +378,7 @@ let evaluate_step : machine_state -> word list -> line_number -> step_result =
 
       ms_m_tool                       = default `Mnotool                              ews.ew_m_tool;
 
-      ms_line_number = line_number;
+      ms_orig_line_number = line_number;
     } in
     { sr_state0   = state;
       sr_state1   = state';
