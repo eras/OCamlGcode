@@ -477,8 +477,10 @@ let word_list_of_step_result : step_result -> word list =
         (fun x -> cast_rv (reg_value_of_gm (x :> gm)))
         sr.sr_commands
     in
+    let line_number = [`N, float a.ms_orig_line_number] in
     let words =
-      g ms_g_plane @
+      line_number @
+        g ms_g_plane @
         g ms_g_distance @
         g ms_g_feed_rate @
         g ms_g_units @
