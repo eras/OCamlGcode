@@ -18,6 +18,7 @@ rule token = parse
 	       if Pcre.pmatch ~pat:"\\." value
 	       then Float (float_of_string value)
 	       else Int (int_of_string value)) }
+  | '%' '\r'? '\n' { token lexbuf }
   | ('(' [^ ')' '\n']* ')') as comment { Comment comment }
   | ([' ' '\t'] * ';' [^ '\n']*) as comment { Comment comment }
   | [' ' '\t' '\r'] *
